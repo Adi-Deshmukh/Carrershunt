@@ -8,12 +8,14 @@ from app.services.job_sources.lever import LeverSource
 
 
 def detect_platform(url: str) -> str:
-    host = (urlparse(url).hostname or "").lower()
-    if "greenhouse" in host:
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    path = (parsed.path or "").lower()
+    if "greenhouse" in host or "greenhouse.io" in path:
         return "greenhouse"
-    if "lever" in host:
+    if "lever" in host or "lever.co" in path:
         return "lever"
-    if "ashby" in host:
+    if "ashby" in host or "ashbyhq" in path:
         return "ashby"
     return "generic"
 
