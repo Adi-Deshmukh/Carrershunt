@@ -1,31 +1,41 @@
 # Carrershunt
 
-AI-powered job discovery, candidate matching, resume tailoring, and professional outreach.
+AI-powered job discovery, candidate matching, resume tailoring, professional outreach, and application tracking.
 
-## Initial architecture
+## Current backend
 
-Carrershunt is being built incrementally as a modular pipeline:
+- Company Excel ingestion and persistence
+- Greenhouse, Lever, Ashby, and generic job ingestion
+- Job normalization and deduplication
+- Candidate profile/evidence storage
+- Deterministic eligibility and skill matching
+- Fit score, gaps, explanation, and interview estimate
+- AI-grounded tailored DOCX generation
+- Public professional profile discovery through a configurable search provider
+- Human-reviewed outreach drafting
+- Application tracking
 
-1. Import companies from Excel
-2. Discover and ingest jobs from career sites/APIs
-3. Normalize job descriptions
-4. Apply deterministic eligibility rules
-5. Match jobs against candidate evidence
-6. Generate a grounded tailored resume
-7. Discover relevant public professional contacts
-8. Generate human-reviewed outreach
-9. Track applications and outcomes
+## Local setup
 
-## Current phase
+1. Create a Python 3.11+ environment.
+2. Install the project with the dev dependencies.
+3. Copy .env.example to .env.
+4. Add OPENAI_API_KEY for AI tailoring.
+5. Add SERPER_API_KEY for public-profile discovery.
+6. Run the FastAPI server with uvicorn.
 
-Phase 1 establishes the backend foundation and data contracts. The first functional feature will be company Excel ingestion.
+The default database is SQLite for local development. Use PostgreSQL in production.
 
-## Planned stack
+## Workflow
 
-- Python + FastAPI
-- PostgreSQL + pgvector
-- Redis + background workers
-- Playwright for dynamic career pages
-- Official job-board APIs where available
-- OpenAI API for structured JD analysis, semantic reasoning, and grounded generation
-- React + Vite frontend
+Candidate profile
+-> Company Excel
+-> Career platform detection
+-> Job ingestion
+-> Eligibility + matching
+-> Tailored resume
+-> Public people discovery
+-> Outreach draft
+-> Application tracking
+
+The system does not automatically send mass outreach. Generated messages remain drafts for user review.
