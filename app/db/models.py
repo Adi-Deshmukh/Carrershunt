@@ -17,6 +17,7 @@ class Company(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     jobs: Mapped[list["Job"]] = relationship(back_populates="company", cascade="all, delete-orphan")
+    people: Mapped[list["Person"]] = relationship(back_populates="company", cascade="all, delete-orphan")
 
 
 class Job(Base):
@@ -97,6 +98,8 @@ class Person(Base):
     relevance_score: Mapped[float] = mapped_column(Float, default=0)
     source: Mapped[str] = mapped_column(String(100))
     rationale: Mapped[str | None] = mapped_column(Text)
+
+    company: Mapped[Company] = relationship(back_populates="people")
 
 
 class OutreachMessage(Base):
