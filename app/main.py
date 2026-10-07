@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.routes.applications import router as applications_router
+from app.api.routes.applications import router as applications_router\nfrom app.api.routes.candidates import router as candidates_router
 from app.api.routes.companies import router as companies_router
 from app.api.routes.jobs import router as jobs_router
 from app.api.routes.matches import router as matches_router
@@ -25,7 +25,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.include_router(companies_router)
+app.include_router(candidates_router)\napp.include_router(companies_router)
 app.include_router(jobs_router)
 app.include_router(matches_router)
 app.include_router(resumes_router)
