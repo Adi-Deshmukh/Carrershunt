@@ -3,9 +3,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_env: str = "development"
-    database_url: str
-    redis_url: str
+    database_url: str = "sqlite:///./carrershunt.db"
+    redis_url: str = "redis://localhost:6379/0"
     openai_api_key: str = ""
+    openai_model: str = "gpt-5.6-mini"
+    serper_api_key: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
