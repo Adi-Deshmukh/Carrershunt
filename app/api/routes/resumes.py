@@ -1,13 +1,12 @@
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import CandidateProfile, Job, ResumeVersion
 from app.db.session import get_db
-from app.services.ai_service import AIService
-from app.services.matching import match_job
 from app.services.resume_service import generate_docx
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
@@ -20,39 +19,32 @@ def tailor_resume(job_id: int, db: Session = Depends(get_db)):
     if not job or not candidate:
         raise HTTPException(status_code=404, detail="Job or candidate profile not found")
 
-    match = match_job(job, candidate).model_dump()
-    ai = AIService()
-    tailored = ai.tailor_resume(
-        {
-            "name": candidate.name,
-            "education": candidate.education,
-            "experience_years": candidate.experience_years,
-            "resume_text": candidate.resume_text,
-            "evidence": json.loads(candidate.evidence_json or "{}"),
-        },
-        {
-            "title": job.title,
-            "description": job.description,
-            "location": job.location,
-            "department": job.department,
-            "job_url": job.job_url,
-        },
-        match,
-    )
-
-    path, _ = generate_docx(candidate, job, tailored)
+    path, content = generate_docx(candidate, job)
     version = ResumeVersion(
         job_id=job.id,
         filename=path.name,
-        content_json=json.dumps(tailored),
+        content_json=json.dumps(content),
         file_path=str(path),
     )
     db.add(version)
     db.commit()
+    db.refresh(version)
+
     return {
         "resume_id": version.id,
         "filename": path.name,
-        "path": str(path),
-        "tailored": tailored,
-        "match": match,
+        "download_url": f"/resumes/{version.id}/download",
+        "content": content,
     }
+
+
+@router.get("/{resume_id}/download")
+def download_resume(resume_id: int, db: Session = Depends(get_db)):
+    version = db.get(ResumeVersion, resume_id)
+    if not version:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    return FileResponse(
+        version.file_path,
+        filename=version.filename,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
