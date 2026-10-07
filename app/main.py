@@ -2,7 +2,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.routes.applications import router as applications_router\nfrom app.api.routes.candidates import router as candidates_router
+from app.api.routes.applications import router as applications_router
+from app.api.routes.candidates import router as candidates_router\nfrom app.api.routes.candidates import router as candidates_router
 from app.api.routes.companies import router as companies_router
 from app.api.routes.jobs import router as jobs_router
 from app.api.routes.matches import router as matches_router
@@ -31,6 +32,7 @@ app.include_router(matches_router)
 app.include_router(resumes_router)
 app.include_router(people_router)
 app.include_router(applications_router)
+app.include_router(candidates_router)
 
 
 @app.get("/health")
