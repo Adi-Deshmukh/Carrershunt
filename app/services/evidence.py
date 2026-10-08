@@ -23,8 +23,14 @@ def _tokens(text: str) -> set[str]:
     }
 
 
-def fingerprint(source: str, source_key: str, content: str) -> str:
-    raw = f"{source}|{source_key}|{content}".encode("utf-8")
+def fingerprint(
+    candidate_id: int,
+    source: str,
+    source_key: str,
+    content: str,
+) -> str:
+    """Create a candidate-scoped fingerprint for idempotent evidence upserts."""
+    raw = f"{candidate_id}|{source}|{source_key}|{content}".encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
 
 
