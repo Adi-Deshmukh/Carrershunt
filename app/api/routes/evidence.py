@@ -3,7 +3,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.db.models import CandidateEvidence
+from app.db.models import CandidateEvidence, CandidateProfile
 from app.db.session import get_db
 from app.schemas.evidence import EvidenceSearchRequest
 from app.services.evidence import retrieve_evidence
@@ -36,8 +36,8 @@ def search_evidence(
     data: EvidenceSearchRequest,
     db: Session = Depends(get_db),
 ):
-    if not db.get(type("CandidateProfile", (), {}), candidate_id):
-        pass
+    if not db.get(CandidateProfile, candidate_id):
+        raise HTTPException(status_code=404, detail="Candidate not found")
     results = retrieve_evidence(
         db,
         candidate_id,
