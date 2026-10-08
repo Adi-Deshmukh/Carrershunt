@@ -64,9 +64,20 @@ class AgentService:
             plan = AIService().tailor_resume_plan(candidate, structured, match, evidence)
         else:
             matched = {s.lower() for item in evidence for s in item.get("skills", [])}
+            candidate_text = (candidate.resume_text or "").lower()
+            grounded_skills = []
+            for skill in structured.required_skills:
+                skill_lower = skill.lower()
+                if skill_lower in matched or skill_lower in candidate_text:
+                    grounded_skills.append(skill)
+            for skill in structured.preferred_skills:
+                skill_lower = skill.lower()
+                if skill_lower in matched or skill_lower in candidate_text:
+                    if skill not in grounded_skills:
+                        grounded_skills.append(skill)
             plan = ResumePlan(
                 summary=f"{candidate.name} with {candidate.experience_years:g} years of experience aligned to {structured.title}.",
-                skills=[skill for skill in structured.required_skills if skill.lower() in matched],
+                skills=grounded_skills,
                 projects=[{"name": item["title"], "bullets": [item["content"][:400]]} for item in evidence[:3] if item.get("type") in {"project", "github"}],
                 claims=[],
             )
