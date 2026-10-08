@@ -141,7 +141,7 @@ function Jobs({ jobs, companies, candidate, refresh }) {
   </div>;
 }
 
-function Companies({ companies, refresh }) {
+function Companies({ companies, refresh, go }) {
   const input = useRef();
   const [busy, setBusy] = useState(false); const [message,setMessage]=useState("");
   const upload = async () => {
@@ -156,6 +156,7 @@ function Companies({ companies, refresh }) {
         : `${p.processed} jobs processed, ${p.failed} pipeline failures.`;
       setMessage(`Imported ${r.imported} companies, ingested ${r.jobs_ingested || 0} jobs. ${pipelineText}`);
       await refresh();
+      go("jobs");
     } catch(e){setMessage(e.message)} finally{setBusy(false)}
   };
   const ingest = async (id) => {
@@ -372,7 +373,7 @@ export default function App() {
     <main><header className="topbar"><div className="crumb">CARRERSHUNT <span>/</span> {nav.find(x=>x[0]===page)?.[1].toUpperCase()}</div><button className="refresh" onClick={refresh}>↻ Refresh</button></header>
       {page==="overview"&&<Overview stats={stats} jobs={data.jobs} companies={data.companies} candidate={data.candidate} go={setPage}/>}
       {page==="jobs"&&<Jobs jobs={data.jobs} companies={data.companies} candidate={data.candidate} refresh={refresh}/>}
-      {page==="companies"&&<Companies companies={data.companies} refresh={refresh}/>}
+      {page==="companies"&&<Companies companies={data.companies} refresh={refresh} go={setPage}/>}
       {page==="candidate"&&<Candidate candidate={data.candidate} refresh={refresh}/>}
       {page==="people"&&<People jobs={data.jobs}/>}
       {page==="applications"&&<Applications applications={data.applications} jobs={data.jobs} refresh={refresh}/>}
