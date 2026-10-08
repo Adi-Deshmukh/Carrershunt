@@ -26,6 +26,14 @@ Implemented:
 
 The retrieval layer is provider-independent. It starts with structured/keyword retrieval and can later add embeddings/pgvector without changing agent interfaces.
 
+## Phase 2: Agentic Job-to-Resume Pipeline
+
+The complete Phase 2 workflow is now connected:
+
+Raw Job -> Job Intelligence Agent -> Structured JD -> Candidate Intelligence Agent -> Evidence Retrieval -> Match Agent -> Hard Eligibility + Evidence-Grounded Fit -> Resume Agent -> Deterministic Claim Validation -> DOCX Resume -> Persistent Pipeline Run
+
+Phase 2 includes LangGraph orchestration, structured job extraction, evidence-grounded matching, hard eligibility checks, deterministic claim validation, validated DOCX generation, persistent pipeline runs, and end-to-end tests. LLM use is optional; hard eligibility and claim validation remain deterministic.
+
 ## Current backend
 
 - Company Excel ingestion and persistence
