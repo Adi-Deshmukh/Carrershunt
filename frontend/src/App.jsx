@@ -178,16 +178,44 @@ function Candidate({ candidate, refresh }) {
   const [form,setForm]=useState({name:candidate?.name||"",email:candidate?.email||"",education:candidate?.education||"",graduation_year:candidate?.graduation_year||"",experience_years:candidate?.experience_years||0,location:candidate?.location||"",work_authorization:candidate?.work_authorization||""});
   const [resume,setResume]=useState(null); const [github,setGithub]=useState(""); const [busy,setBusy]=useState(false); const [message,setMessage]=useState("");
   useEffect(()=>{if(candidate)setForm({name:candidate.name||"",email:candidate.email||"",education:candidate.education||"",graduation_year:candidate.graduation_year||"",experience_years:candidate.experience_years||0,location:candidate.location||"",work_authorization:candidate.work_authorization||""})},[candidate]);
-  const save=async(e)=>{
-    e.preventDefault();setBusy(true);setMessage("");
-    try{
-      const existing=candidate?.id;
-      if(existing){ const r=await api(`/candidates/${existing}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({...form,graduation_year:form.graduation_year?Number(form.graduation_year):null,experience_years:Number(form.experience_years)||0})}); setMessage("Profile updated."); await refresh(); return; }\n      if(!existing){
-        const r=await api("/candidates",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...form,graduation_year:form.graduation_year?Number(form.graduation_year):null,experience_years:Number(form.experience_years)||0,resume_text:"Master resume pending",evidence:{}})});
-        setMessage(`Candidate created (#${r.id}). Upload the master resume below.`);
+  const save = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      const existing = candidate?.id;
+      if (existing) {
+        await api(`/candidates/${existing}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...form,
+            graduation_year: form.graduation_year ? Number(form.graduation_year) : null,
+            experience_years: Number(form.experience_years) || 0,
+          }),
+        });
+        setMessage("Profile updated.");
         await refresh();
-      } else setMessage("Profile already exists. Upload/update the resume below.");
-    }catch(e){setMessage(e.message)}finally{setBusy(false)}
+        return;
+      }
+      const r = await api("/candidates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          graduation_year: form.graduation_year ? Number(form.graduation_year) : null,
+          experience_years: Number(form.experience_years) || 0,
+          resume_text: "Master resume pending",
+          evidence: {},
+        }),
+      });
+      setMessage(`Candidate created (#${r.id}). Upload the master resume below.`);
+      await refresh();
+    } catch (e) {
+      setMessage(e.message);
+    } finally {
+      setBusy(false);
+    }
   };
   const uploadResume=async()=>{
     if(!candidate?.id||!resume)return;
@@ -237,18 +265,94 @@ function People({ jobs }) {
 }
 
 function Settings() {
-  const [form,setForm]=useState({openai_api_key:"",openai_model:"gpt-6-luna",github_token:"",serper_api_key:""}); const [status,setStatus]=useState("");
-  useEffect(()=>{api("/settings").then(r=>setForm(f=>({...f,openai_model:r.openai_model||f.openai_model}))).catch(()=>{})},[]);
-  const save=async()=>{try{const r=await api("/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(form)});setStatus(r.message||"Settings updated.");setForm(f=>({...f,openai_api_key:"",github_token:"",serper_api_key:""}))}catch(e){setStatus(e.message)}};
-  return <div className="page"><div className="page-head"><div><div className="eyebrow">SYSTEM CONFIGURATION</div><h1>Settings</h1><p>Configure integrations from the dashboard. Secrets are sent only to your Carrershunt backend.</p></div></div>
-    {status&&<div className="notice">{status}</div>}
-    <section className="panel settings-panel"><div className="panel-head"><div><h2>AI & data providers</h2><span>Keys are runtime configuration; do not commit them to Git.</span></div></div>
-      <div className="form-grid"><label>OpenAI API key<input type="password" value={form.openai_api_key} onChange={e=>setForm({...form,openai_api_key:e.target.value})} placeholder="sk-…"/></label><label>OpenAI model<input value={form.openai_model} onChange={e=>setForm({...form,openai_model:e.target.value})}/></label><label>GitHub token<input type="password" value={form.github_token} onChange={e=>setForm({...form,github_token:e.target.value})} placeholder="ghp_…"/></label><label>Serper API key<input type="password" value={form.serper_api_key} onChange={e=>setForm({...form,serper_api_key:e.target.value})} placeholder="For people search"/></label></div>
-      <div className="settings-note">Security note: the current backend keeps these values in process memory and they are lost on restart. For public deployment, replace this with encrypted secret storage plus authentication.</div>
-      <button className="primary" onClick={save}>Save integration settings</button>
-    </section>
-  </div>;
+  const emptyForm = {
+    ai_provider: "auto",
+    openai_api_key: "", openai_model: "gpt-4o",
+    gemini_api_key: "", gemini_model: "gemini-2.0-flash",
+    xai_api_key: "",    xai_model: "grok-3-mini",
+    github_token: "",   serper_api_key: "",
+  };
+  const [form, setForm] = useState(emptyForm);
+  const [info, setInfo] = useState(null);
+  const [status, setStatus] = useState("");
+
+  useEffect(() => {
+    api("/settings").then(r => {
+      setInfo(r);
+      setForm(f => ({
+        ...f,
+        ai_provider:  r.ai_provider  || f.ai_provider,
+        openai_model: r.openai_model || f.openai_model,
+        gemini_model: r.gemini_model || f.gemini_model,
+        xai_model:    r.xai_model    || f.xai_model,
+      }));
+    }).catch(() => {});
+  }, []);
+
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+
+  const save = async () => {
+    try {
+      const r = await api("/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      setStatus(r.message || "Settings updated.");
+      setInfo(r);
+      setForm(f => ({ ...f, openai_api_key: "", gemini_api_key: "", xai_api_key: "", github_token: "", serper_api_key: "" }));
+    } catch (e) { setStatus(e.message); }
+  };
+
+  return (
+    <div className="page">
+      <div className="page-head"><div><div className="eyebrow">SYSTEM CONFIGURATION</div><h1>Settings</h1><p>Configure integrations from the dashboard. Secrets are sent only to your Carrershunt backend.</p></div></div>
+      {status && <div className="notice">{status}</div>}
+      {info && <div className="chips" style={{marginBottom:"1rem"}}>
+        <span style={{marginRight:"0.5rem"}}>Provider: <strong>{info.ai_provider}</strong></span>
+        {(info.configured_providers||[]).map(p => <Badge key={p} tone="success">{p} ✓</Badge>)}
+        {info.github_configured && <Badge tone="success">GitHub ✓</Badge>}
+        {info.serper_configured && <Badge tone="success">Serper ✓</Badge>}
+      </div>}
+      <section className="panel settings-panel">
+        <div className="panel-head"><div><h2>AI routing</h2><span>Keys are runtime configuration; do not commit them to Git.</span></div></div>
+        <div className="form-grid">
+          <label>Provider routing
+            <select value={form.ai_provider} onChange={set("ai_provider")}>
+              <option value="auto">auto (primary → fallback)</option>
+              <option value="openai">OpenAI only</option>
+              <option value="gemini">Gemini only</option>
+              <option value="grok">Grok / xAI only</option>
+            </select>
+          </label>
+        </div>
+        <div className="panel-head" style={{marginTop:"1.25rem"}}><div><h2>OpenAI</h2></div></div>
+        <div className="form-grid">
+          <label>API key<input type="password" value={form.openai_api_key} onChange={set("openai_api_key")} placeholder="sk-…"/></label>
+          <label>Model<input value={form.openai_model} onChange={set("openai_model")}/></label>
+        </div>
+        <div className="panel-head" style={{marginTop:"1.25rem"}}><div><h2>Google Gemini</h2></div></div>
+        <div className="form-grid">
+          <label>API key<input type="password" value={form.gemini_api_key} onChange={set("gemini_api_key")} placeholder="AIza…"/></label>
+          <label>Model<input value={form.gemini_model} onChange={set("gemini_model")}/></label>
+        </div>
+        <div className="panel-head" style={{marginTop:"1.25rem"}}><div><h2>xAI / Grok</h2></div></div>
+        <div className="form-grid">
+          <label>API key<input type="password" value={form.xai_api_key} onChange={set("xai_api_key")} placeholder="xai-…"/></label>
+          <label>Model<input value={form.xai_model} onChange={set("xai_model")}/></label>
+        </div>
+        <div className="panel-head" style={{marginTop:"1.25rem"}}><div><h2>Integrations</h2></div></div>
+        <div className="form-grid">
+          <label>GitHub token<input type="password" value={form.github_token} onChange={set("github_token")} placeholder="ghp_…"/></label>
+          <label>Serper API key<input type="password" value={form.serper_api_key} onChange={set("serper_api_key")} placeholder="For people search"/></label>
+        </div>
+        <div className="settings-note">Security: the backend holds these values in process memory only — they are lost on restart. For production, replace with encrypted secret storage and authentication.</div>
+        <button className="primary" onClick={save}>Save integration settings</button>
+      </section>
+    </div>
+  );
 }
+
 
 export default function App() {
   const [page,setPage]=useState("overview"); const [data,setData]=useState({jobs:[],companies:[],applications:[],candidate:null}); const [loading,setLoading]=useState(true);

@@ -61,6 +61,19 @@ def create_candidate(data: CandidateCreate, db: Session = Depends(get_db)):
     return {"id": candidate.id, "name": candidate.name, "evidence_indexed": len(data.evidence) + 1}
 
 
+@router.patch("/{candidate_id}")
+def update_candidate(candidate_id: int, data: CandidateUpdate, db: Session = Depends(get_db)):
+    from fastapi import HTTPException
+    candidate = db.get(CandidateProfile, candidate_id)
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(candidate, field, value)
+    db.commit()
+    db.refresh(candidate)
+    return {"id": candidate.id, "name": candidate.name}
+
+
 @router.get("/latest")
 def get_latest_candidate(db: Session = Depends(get_db)):
     candidate = db.scalar(select(CandidateProfile).order_by(CandidateProfile.id.desc()))
