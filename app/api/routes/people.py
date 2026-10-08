@@ -61,17 +61,22 @@ def create_outreach(job_id: int, person_id: int | None = None, db: Session = Dep
     if "openai" in ai.configured_providers():
         response = ai.providers["openai"].chat.completions.create(
             model=__import__("app.core.config", fromlist=["settings"]).settings.openai_model,
-            messages=[{"role": "user", "content": (
-                "Write a concise, professional referral outreach email. "
-                "Use only supplied facts. Do not fabricate a relationship. "
-                + json.dumps({
-                    "candidate": {"name": candidate.name, "resume": candidate.resume_text},
-                    "job": {"title": job.title, "company": job.company.name if job.company else ""},
-                    "person": {"name": person.name, "role": person.role} if person else None,
-                })
-            ),
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        "Write a concise, professional referral outreach email. "
+                        "Use only supplied facts. Do not fabricate a relationship. "
+                        + json.dumps({
+                            "candidate": {"name": candidate.name, "resume": candidate.resume_text},
+                            "job": {"title": job.title, "company": job.company.name if job.company else ""},
+                            "person": {"name": person.name, "role": person.role} if person else None,
+                        })
+                    ),
+                }
+            ],
         )
-        body = response.output_text
+        body = (response.choices[0].message.content or "").strip()
         subject = f"Interested in {job.title}"
     else:
         body = (
