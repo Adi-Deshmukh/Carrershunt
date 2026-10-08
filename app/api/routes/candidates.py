@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import CandidateProfile, CandidateEvidence
 from app.db.session import get_db
-from app.schemas.candidate import CandidateCreate
+from app.schemas.candidate import CandidateCreate, CandidateUpdate
 from app.services.evidence import EvidenceInput, upsert_evidence
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
