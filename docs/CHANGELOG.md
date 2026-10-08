@@ -2,35 +2,25 @@
 
 ## Unreleased
 
-### Architecture
-- Defined the final lean multi-agent architecture.
-- Added an orchestrator as workflow coordinator instead of an autonomous agent swarm.
-- Defined RAG as a shared retrieval capability.
-- Kept deterministic execution in services and contextual reasoning in agents.
-- Deferred vector databases, Redis, workers, autonomous browser agents, microservices, Kubernetes, knowledge graphs and outcome ML until justified.
+### Phase 1 completed
+- Added persistent CandidateEvidence records.
+- Added PDF, DOCX and TXT master resume extraction.
+- Added GitHub profile/repository ingestion with metadata, languages, topics and README content.
+- Added candidate-scoped evidence fingerprints and idempotent upserts.
+- Added structured keyword/metadata evidence retrieval.
+- Added API endpoints for resume ingestion, GitHub synchronization, evidence inspection and retrieval.
+- Added tests for idempotency, ranking and candidate isolation.
+- Fixed malformed duplicate router wiring in the FastAPI entry point.
 
-### Current baseline
-- FastAPI API.
-- SQLAlchemy persistence with SQLite development configuration.
-- Company Excel ingestion.
-- Greenhouse, Lever, Ashby and generic job sources.
-- Job persistence/deduplication.
-- Candidate profile/evidence storage.
-- Basic skill/experience/education matching.
-- AI resume tailoring and DOCX generation.
-- Public professional profile search abstraction.
-- Outreach drafting.
-- Application tracking.
-- GitHub Actions CI.
+### Architecture
+- Lean orchestrated multi-agent architecture remains the target.
+- RAG is a shared retrieval capability, not a separate agent.
+- Deterministic execution remains in services.
+- Embeddings/pgvector remain deferred until retrieval quality requires them.
 
 ### Next milestone
-Candidate Intelligence + Agent Infrastructure:
-- CandidateEvidence model/service.
-- GitHub ingestion.
-- Retrieval interface.
-- Configurable LLM provider abstraction.
+Agent Infrastructure:
+- LLM provider abstraction.
 - Minimal agent interface.
-- Orchestrator.
+- LangGraph workflow.
 - Job Intelligence Agent.
-
-Changelog entries should capture product/architecture milestones, while tests accompany affected behavior.
