@@ -45,7 +45,7 @@ def upsert_evidence(db: Session, candidate_id: int, item: EvidenceInput) -> Cand
     if not content:
         raise ValueError("Evidence content cannot be empty")
 
-    fp = fingerprint(item.source, item.source_key, content)
+    fp = fingerprint(candidate_id, item.source, item.source_key, content)
     existing = db.scalar(
         select(CandidateEvidence).where(
             CandidateEvidence.candidate_id == candidate_id,
