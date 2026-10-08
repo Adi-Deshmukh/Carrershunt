@@ -30,7 +30,8 @@ def list_jobs(db: Session = Depends(get_db)):
             "location": j.location,
             "employment_type": j.employment_type,
             "job_url": j.job_url,
-            "source": j.source,\n            "company_name": j.company.name if j.company else None,
+            "source": j.source,
+            "company_name": j.company.name if j.company else None,
         }
         for j in jobs
     ]
