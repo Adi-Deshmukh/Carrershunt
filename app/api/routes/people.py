@@ -58,10 +58,10 @@ def create_outreach(job_id: int, person_id: int | None = None, db: Session = Dep
         raise HTTPException(status_code=404, detail="Job or candidate not found")
 
     ai = AIService()
-    if ai.client:
-        response = ai.client.responses.create(
+    if "openai" in ai.configured_providers():
+        response = ai.providers["openai"].chat.completions.create(
             model=__import__("app.core.config", fromlist=["settings"]).settings.openai_model,
-            input=(
+            messages=[{"role": "user", "content": (
                 "Write a concise, professional referral outreach email. "
                 "Use only supplied facts. Do not fabricate a relationship. "
                 + json.dumps({
