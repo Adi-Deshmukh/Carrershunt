@@ -150,7 +150,11 @@ function Companies({ companies, refresh }) {
     try {
       const body=new FormData(); body.append("file",file);
       const r=await api("/companies/import",{method:"POST",body});
-      setMessage(`Imported ${r.imported} companies. ${r.duplicates} duplicates, ${r.invalid} invalid rows.`);
+      const p = r.pipeline || {};
+      const pipelineText = p.requires_candidate
+        ? "Create/upload your candidate resume to run matching."
+        : `${p.processed} jobs processed, ${p.failed} pipeline failures.`;
+      setMessage(`Imported ${r.imported} companies, ingested ${r.jobs_ingested || 0} jobs. ${pipelineText}`);
       await refresh();
     } catch(e){setMessage(e.message)} finally{setBusy(false)}
   };
