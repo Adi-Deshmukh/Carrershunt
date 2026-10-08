@@ -169,9 +169,8 @@ def _write_docx(candidate: CandidateProfile, job: Job, content: dict, suffix: st
 
 def generate_docx_from_plan(candidate: CandidateProfile, job: Job, plan: ResumePlan) -> tuple[Path, dict]:
     content = plan.model_dump()
-    return _write_docx(candidate, job, content, "_tailored")
-
-
+    path = _write_docx(candidate, job, content, "_tailored")
+    return path, content
 def generate_docx(candidate: CandidateProfile, job: Job) -> tuple[Path, dict]:
     match = match_job(job, candidate).model_dump()
     content = AIService().tailor_resume(_candidate_dict(candidate), _job_dict(job), match)
