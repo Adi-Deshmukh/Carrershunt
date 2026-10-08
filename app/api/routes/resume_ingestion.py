@@ -5,6 +5,7 @@ from app.db.models import CandidateProfile
 from app.db.session import get_db
 from app.services.evidence import EvidenceInput, upsert_evidence
 from app.services.resume_parser import extract_resume_text
+from app.services.resume_service import master_resume_path
 
 router = APIRouter(prefix="/candidates", tags=["candidate-resume"])
 
@@ -26,6 +27,8 @@ async def upload_master_resume(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     candidate.resume_text = text
+    if (file.filename or "").lower().endswith(".docx"):
+        master_resume_path(candidate_id).write_bytes(content)
     upsert_evidence(
         db,
         candidate_id,
