@@ -58,4 +58,4 @@ app.include_router(settings_router)
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "version": APP_VERSION}
+    return {"status": "ok"}
