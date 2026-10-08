@@ -25,6 +25,7 @@ class MatchDecision(BaseModel):
     hard_failures: list[str] = Field(default_factory=list)
     gaps: list[str] = Field(default_factory=list)
     evidence: list[dict] = Field(default_factory=list)
+    score_breakdown: dict[str, float] = Field(default_factory=dict)
 
 
 class ResumeProject(BaseModel):
