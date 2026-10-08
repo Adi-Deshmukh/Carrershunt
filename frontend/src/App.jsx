@@ -83,31 +83,61 @@ function Overview({ stats, jobs, companies, candidate, go }) {
 
 function Jobs({ jobs, companies, candidate, refresh }) {
   const [running, setRunning] = useState({});
+  const [selected, setSelected] = useState(null);
+  const [result, setResult] = useState(null);
   const [message, setMessage] = useState("");
+
+  const openResult = async (job) => {
+    setSelected(job); setMessage("");
+    try {
+      const r = await api(`/pipeline/jobs/${job.id}/latest`);
+      setResult(r.result);
+    } catch { setResult(null); }
+  };
+
   const run = async (jobId, useLlm = false) => {
     setRunning(r => ({...r, [jobId]: true})); setMessage("");
     try {
-      const result = await api(`/pipeline/${jobId}?use_llm=${useLlm}`, {method:"POST"});
-      setMessage(`Pipeline completed for job #${jobId}: ${result.status}. Fit ${result.match?.fit_score ?? "—"}.`);
+      const r = await api(`/pipeline/${jobId}?use_llm=${useLlm}`, {method:"POST"});
+      setResult(r); setSelected(jobs.find(j => j.id === jobId)); setMessage(`Pipeline completed: ${r.status}.`);
       await refresh();
     } catch(e) { setMessage(e.message); } finally { setRunning(r => ({...r, [jobId]: false})); }
   };
+
   return <div className="page">
-    <div className="page-head"><div><div className="eyebrow">JOB INTELLIGENCE</div><h1>Jobs</h1><p>Ingest roles, run evidence-grounded matching, and generate tailored resumes.</p></div></div>
+    <div className="page-head"><div><div className="eyebrow">JOB INTELLIGENCE</div><h1>Jobs</h1><p>Review eligibility, evidence, gaps, score breakdown, and the tailored resume before applying.</p></div></div>
     {message && <div className="notice">{message}</div>}
     {!candidate && <div className="warning-box">Create your candidate profile before running the pipeline.</div>}
     <section className="panel">
-      <div className="panel-head"><div><h2>{jobs.length} roles in pipeline</h2><span>Select a role to run the full intelligence workflow.</span></div></div>
+      <div className="panel-head"><div><h2>{jobs.length} roles in pipeline</h2><span>Click a role to inspect its latest analysis.</span></div></div>
       {jobs.length ? <div className="job-grid">{jobs.map(j => {
         const company = companies.find(c => c.id === j.company_id);
-        return <article className="job-card" key={j.id}>
+        return <article className="job-card" key={j.id} onClick={() => openResult(j)}>
           <div className="job-top"><Badge>{j.source || "source"}</Badge><span className="job-id">#{j.id}</span></div>
           <h3>{j.title}</h3><p>{company?.name || "Unknown company"} · {j.location || "Location not specified"}</p>
-          <div className="job-meta"><span>{j.employment_type || "Role"}</span><a href={j.job_url} target="_blank" rel="noreferrer">View posting ↗</a></div>
-          <button className="primary full" disabled={!candidate || running[j.id]} onClick={() => run(j.id, false)}>{running[j.id] ? "Processing…" : "Run match + resume →"}</button>
+          <div className="job-meta"><span>{j.employment_type || "Role"}</span><a href={j.job_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>View posting ↗</a></div>
+          <button className="primary full" disabled={!candidate || running[j.id]} onClick={e => {e.stopPropagation();run(j.id, false)}}>{running[j.id] ? "Processing…" : "Analyze + tailor resume →"}</button>
         </article>
       })}</div> : <Empty title="No jobs imported" text="Go to Companies, upload your Excel, then ingest the sources." />}
     </section>
+
+    {selected && <section className="panel result-panel">
+      <div className="panel-head"><div><div className="eyebrow">MATCH RESULT</div><h2>{selected.title}</h2><span>{companies.find(c=>c.id===selected.company_id)?.name || "Company"} · {selected.location || "Location unspecified"}</span></div>
+        {result?.resume_download_url && <a className="primary download-link" href={`${API_BASE}${result.resume_download_url}`}>Download tailored DOCX ↓</a>}
+      </div>
+      {result ? <div className="result-grid">
+        <div className="score-card"><span>FIT SCORE</span><strong>{Math.round(result.match?.fit_score ?? 0)}</strong><small>{result.match?.eligible ? "Eligible" : "Hard eligibility failure"}</small></div>
+        <div className="score-card"><span>INTERVIEW ESTIMATE</span><strong className="small-score">{result.match?.interview_estimate || "—"}</strong><small>Confidence: {result.match?.confidence || "—"}</small></div>
+        <div className="score-card"><span>RESUME</span><strong className="small-score">{result.resume_generated ? "Ready" : "Blocked"}</strong><small>{result.validation_errors?.length ? result.validation_errors.length + " validation issues" : "Validated"}</small></div>
+      </div> : <Empty title="No analysis yet" text="Run the pipeline to generate the match and tailored resume."/>}
+      {result && <div className="result-details">
+        <div><h3>Why this matches</h3><p>{result.match?.explanation || "No explanation available."}</p></div>
+        <div><h3>Gaps</h3>{(result.match?.gaps||[]).length ? <ul>{result.match.gaps.map((g,i)=><li key={i}>{g}</li>)}</ul> : <p className="muted">No material gaps identified.</p>}</div>
+        <div><h3>Score breakdown</h3><div className="breakdown">{Object.entries(result.match?.score_breakdown||{}).map(([k,v])=><div key={k}><span>{k.replaceAll("_"," ")}</span><b>{Number(v).toFixed(1)}</b></div>)}</div></div>
+        {result.resume && <div><h3>Tailored resume plan</h3><p><strong>Summary:</strong> {result.resume.summary}</p><div className="chips">{result.resume.skills?.map(s=><Badge key={s}>{s}</Badge>)}</div></div>}
+        {result.resume_id && <div className="resume-preview-box"><div><h3>Resume preview</h3><span>Browser preview of generated content; the downloaded DOCX retains the master template's formatting.</span></div><iframe title="Resume preview" src={`${API_BASE}/resumes/${result.resume_id}/preview`}/></div>}
+      </div>}
+    </section>}
   </div>;
 }
 
