@@ -22,13 +22,12 @@ def run_pipeline(db, candidate: CandidateProfile, job: Job, use_llm: bool = Fals
         )
 
         validation_errors = state.get("validation_errors", [])
+        resume_id = None
+        resume_download_url = None
         resume_generated = False
+
         if state.get("resume") and not validation_errors:
-            path, content = generate_docx_from_plan(
-                candidate,
-                job,
-                state["resume"],
-            )
+            path, content = generate_docx_from_plan(candidate, job, state["resume"])
             version = ResumeVersion(
                 job_id=job.id,
                 filename=path.name,
@@ -37,6 +36,8 @@ def run_pipeline(db, candidate: CandidateProfile, job: Job, use_llm: bool = Fals
             )
             db.add(version)
             db.flush()
+            resume_id = version.id
+            resume_download_url = f"/resumes/{version.id}/download"
             resume_generated = True
 
         result = PipelineResult(
@@ -48,6 +49,8 @@ def run_pipeline(db, candidate: CandidateProfile, job: Job, use_llm: bool = Fals
             match=state["match"],
             resume=state["resume"],
             resume_generated=resume_generated,
+            resume_id=resume_id,
+            resume_download_url=resume_download_url,
             validation_errors=validation_errors,
         )
         run.status = result.status
@@ -55,9 +58,11 @@ def run_pipeline(db, candidate: CandidateProfile, job: Job, use_llm: bool = Fals
         db.commit()
         return result
     except Exception as exc:
+        run_id = run.id
         db.rollback()
-        run.status = "failed"
-        run.error = str(exc)[:4000]
-        db.add(run)
-        db.commit()
+        failed_run = db.get(PipelineRun, run_id)
+        if failed_run:
+            failed_run.status = "failed"
+            failed_run.error = str(exc)[:4000]
+            db.commit()
         raise
