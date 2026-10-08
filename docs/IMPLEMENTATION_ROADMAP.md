@@ -37,13 +37,13 @@ DONE = implemented. NEXT = immediate work. LATER = deliberately deferred.
 
 | Item | Status |
 |---|---|
-| LLM provider abstraction | NEXT |
-| Agent base | NEXT |
-| Orchestrator | NEXT |
-| Job Intelligence Agent | NEXT |
-| Candidate Intelligence Agent | NEXT |
-| Match Agent | NEXT |
-| Resume Agent | NEXT |
+| LLM provider abstraction | DONE |
+| Agent base | DONE |
+| Orchestrator | DONE |
+| Job Intelligence Agent | DONE |
+| Candidate Intelligence Agent | DONE |
+| Match Agent | DONE |
+| Resume Agent | DONE |
 | People Agent | LATER unless deterministic ranking is insufficient |
 | Outreach Agent | LATER; existing service is sufficient |
 | Validation Agent | LATER; deterministic validation first |
@@ -55,11 +55,11 @@ DONE = implemented. NEXT = immediate work. LATER = deliberately deferred.
 | Skill regex matching | DONE |
 | Experience eligibility | DONE |
 | Education eligibility | DONE |
-| Location/work authorization | NEXT |
-| Structured JD | NEXT |
-| Evidence-based matching | NEXT |
+| Location/work authorization | DONE |
+| Structured JD | DONE |
+| Evidence-based matching | DONE |
 | Semantic matching | NEXT |
-| Explainable result | NEXT |
+| Explainable result | DONE |
 | Historical outcome model | LATER |
 
 ## Resume
@@ -68,9 +68,9 @@ DONE = implemented. NEXT = immediate work. LATER = deliberately deferred.
 |---|---|
 | Basic AI tailoring | DONE |
 | DOCX generation | DONE |
-| Master resume parser | NEXT |
-| Evidence-grounded tailoring | NEXT |
-| Claim validation | NEXT |
+| Master resume parser | DONE |
+| Evidence-grounded tailoring | DONE |
+| Claim validation | DONE |
 | Preserve master formatting | NEXT |
 | Multiple versions | PARTIAL |
 
