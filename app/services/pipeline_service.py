@@ -10,7 +10,8 @@ from app.services.resume_service import generate_docx_from_plan
 def run_pipeline(db, candidate: CandidateProfile, job: Job, use_llm: bool = False) -> PipelineResult:
     run = PipelineRun(candidate_id=candidate.id, job_id=job.id, status="running")
     db.add(run)
-    db.flush()
+    db.commit()
+    db.refresh(run)
     try:
         state = pipeline_workflow.invoke({"db": db, "candidate_record": candidate, "job_record": job, "use_llm": use_llm})
         validation_errors = list(state.get("validation_errors", []))
