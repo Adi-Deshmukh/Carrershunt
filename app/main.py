@@ -10,10 +10,13 @@ from app.api.routes.github import router as github_router
 from app.api.routes.jobs import router as jobs_router
 from app.api.routes.matches import router as matches_router
 from app.api.routes.people import router as people_router
+from app.api.routes.pipeline import router as pipeline_router
 from app.api.routes.resume_ingestion import router as resume_ingestion_router
 from app.api.routes.resumes import router as resumes_router
 from app.db.models import Base
 from app.db.session import engine
+
+APP_VERSION = "0.2.0"
 
 
 @asynccontextmanager
@@ -24,7 +27,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Carrershunt API",
-    version="0.1.0",
+    version=APP_VERSION,
     description="Job discovery, candidate intelligence, matching, resume tailoring, outreach, and application tracking.",
     lifespan=lifespan,
 )
@@ -39,8 +42,9 @@ app.include_router(applications_router)
 app.include_router(evidence_router)
 app.include_router(github_router)
 app.include_router(resume_ingestion_router)
+app.include_router(pipeline_router)
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "version": APP_VERSION}
