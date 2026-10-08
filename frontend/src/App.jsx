@@ -95,6 +95,12 @@ function Jobs({ jobs, companies, candidate, refresh }) {
     } catch { setResult(null); }
   };
 
+  useEffect(() => {
+    if (!selected && jobs.length) {
+      openResult(jobs[0]);
+    }
+  }, [jobs]);
+  
   const run = async (jobId, useLlm = false) => {
     setRunning(r => ({...r, [jobId]: true})); setMessage("");
     try {
