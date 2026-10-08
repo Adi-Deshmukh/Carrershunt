@@ -4,113 +4,98 @@
 
 DONE = implemented. NEXT = immediate work. LATER = deliberately deferred.
 
-## Foundation
+## Phase 1 — Candidate Intelligence
 
 | Item | Status |
 |---|---|
-| FastAPI | DONE |
-| SQLAlchemy | DONE |
-| Company Excel import | DONE |
-| Greenhouse/Lever/Ashby/generic sources | DONE |
-| Job persistence/deduplication | DONE |
-| Candidate API | DONE |
-| Application tracking | DONE |
-| Public people search abstraction | DONE |
-| Resume DOCX generation | DONE |
-| CI | DONE |
-| Database migrations | LATER |
-
-## Candidate intelligence
-
-| Item | Status |
-|---|---|
-| CandidateEvidence | DONE |
-| Resume evidence extraction | DONE |
+| Candidate evidence store | DONE |
+| Resume parsing and evidence extraction | DONE |
 | GitHub ingestion | DONE |
-| Evidence normalization | DONE |
-| Retrieval interface | DONE |
-| LinkedIn/public profile import | LATER/optional |
-| Embeddings | LATER |
-| pgvector | LATER |
+| Candidate-scoped retrieval | DONE |
+| Evidence APIs | DONE |
 
-## Agents
+## Phase 2 — Agentic Job-to-Resume Pipeline
 
 | Item | Status |
 |---|---|
-| LLM provider abstraction | DONE |
-| Agent base | DONE |
-| Orchestrator | DONE |
+| LangGraph orchestration | DONE |
 | Job Intelligence Agent | DONE |
 | Candidate Intelligence Agent | DONE |
 | Match Agent | DONE |
+| Hard eligibility | DONE |
+| Evidence-grounded matching | DONE |
 | Resume Agent | DONE |
-| People Agent | LATER unless deterministic ranking is insufficient |
-| Outreach Agent | LATER; existing service is sufficient |
-| Validation Agent | LATER; deterministic validation first |
-
-## Matching
-
-| Item | Status |
-|---|---|
-| Skill regex matching | DONE |
-| Experience eligibility | DONE |
-| Education eligibility | DONE |
-| Location/work authorization | DONE |
-| Structured JD | DONE |
-| Evidence-based matching | DONE |
-| Semantic matching | NEXT |
-| Explainable result | DONE |
-| Historical outcome model | LATER |
-
-## Resume
-
-| Item | Status |
-|---|---|
-| Basic AI tailoring | DONE |
+| Deterministic claim validation | DONE |
+| Persistent pipeline runs | DONE |
 | DOCX generation | DONE |
-| Master resume parser | DONE |
-| Evidence-grounded tailoring | DONE |
-| Claim validation | DONE |
-| Preserve master formatting | NEXT |
-| Multiple versions | PARTIAL |
+| End-to-end pipeline test | DONE |
 
-## People/outreach
+## Phase 3 — Semantic Matching
 
 | Item | Status |
 |---|---|
-| Search provider | DONE |
+| Required vs preferred requirement classification | DONE |
+| Skill aliases / normalization | DONE |
+| Token-level semantic similarity | DONE |
+| Hybrid required-skill + semantic score | DONE |
+| Evidence-aware candidate representation | DONE |
+| Explainable score breakdown | DONE |
+| Hard eligibility override protection | DONE |
+| Embeddings / pgvector | LATER — add only after retrieval evaluation |
+| Historical outcome calibration | LATER |
+
+Phase 3 scoring is intentionally dependency-light. It combines required-skill coverage, preferred-skill coverage, and contextual semantic similarity. Hard eligibility remains deterministic and can cap the score regardless of semantic similarity.
+
+## Phase 4 — Resume Quality and Generation
+
+| Item | Status |
+|---|---|
+| Evidence-grounded resume plan | DONE |
+| Deterministic claim validation | DONE |
+| Numeric-claim guard | DONE |
+| Placeholder detection | DONE |
+| Target-role relevance check | DONE |
+| Final quality gate before DOCX persistence | DONE |
+| Multiple resume versions per job | DONE |
+| Master formatting preservation | NEXT — requires retaining the uploaded source document |
+| Persistent object storage | NEXT |
+| Rich formatting / ATS layout engine | NEXT |
+
+## People / Outreach — next
+
+| Item | Status |
+|---|---|
+| Public profile search provider | DONE |
 | Public profile discovery | DONE |
 | Basic ranking | DONE |
-| Contextual ranking | NEXT |
-| Outreach drafts | DONE |
+| Contextual job-aware ranking | NEXT |
+| Relationship/context signals | NEXT |
+| Outreach draft generation | DONE |
+| Human review before send | DONE |
 | Automatic sending | LATER |
 
 ## Productization
 
 | Item | Status |
 |---|---|
-| React/Vite dashboard | NEXT after core pipeline |
-| Background workers | LATER |
+| React/Vite dashboard | NEXT |
+| Authentication / multi-user isolation | NEXT before public SaaS deployment |
+| Database migrations | NEXT before production schema changes |
+| Background workers | LATER — when volume requires them |
 | Scheduled rescans | LATER |
 | Redis | LATER |
 | Production pgvector | LATER |
-| Authentication/multi-user | LATER |
 | Notifications | LATER |
 | Outcome learning | LATER |
 
 ## Build order
 
-1. CandidateEvidence model/service.
-2. GitHub ingestion and normalization.
-3. LLM provider abstraction.
-4. Minimal agent interface and orchestrator.
-5. Job Intelligence Agent.
-6. Structured job schema and hard eligibility.
-7. Match Agent with evidence retrieval.
-8. Resume Agent with evidence retrieval.
-9. Deterministic claim validator.
-10. End-to-end pipeline test.
-11. Improve people ranking.
-12. Frontend/dashboard.
-13. Add embeddings/pgvector only if retrieval quality requires it.
-14. Add workers/scheduling only when volume requires them.
+1. Candidate intelligence.
+2. Agentic job-to-resume pipeline.
+3. Semantic matching.
+4. Resume quality and generation.
+5. People contextual ranking.
+6. Outreach workflow.
+7. React/Vite dashboard.
+8. Authentication and production persistence.
+9. Outcome collection and calibration.
