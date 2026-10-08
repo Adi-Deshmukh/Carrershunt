@@ -4,6 +4,7 @@ from pathlib import Path
 from docx import Document
 
 from app.db.models import CandidateProfile, Job
+from app.schemas.agent import ResumePlan
 from app.services.ai_service import AIService
 from app.services.matching import match_job
 
@@ -36,18 +37,17 @@ def _job_dict(job: Job) -> dict:
     }
 
 
-def generate_docx(candidate: CandidateProfile, job: Job) -> tuple[Path, dict]:
-    match = match_job(job, candidate).model_dump()
-    content = AIService().tailor_resume(_candidate_dict(candidate), _job_dict(job), match)
-
-    path = OUTPUT_DIR / f"job_{job.id}_resume.docx"
+def _write_docx(candidate: CandidateProfile, job: Job, content: dict, suffix: str) -> Path:
+    path = OUTPUT_DIR / f"candidate_{candidate.id}_job_{job.id}{suffix}.docx"
     doc = Document()
     doc.add_heading(candidate.name, level=0)
     doc.add_paragraph(content.get("summary", ""))
 
     if content.get("skills"):
         doc.add_heading("Skills", level=1)
-        doc.add_paragraph(", ".join(content["skills"]))
+        doc.add_paragraph(", ".join(
+            skill if isinstance(skill, str) else str(skill) for skill in content["skills"]
+        ))
 
     if content.get("projects"):
         doc.add_heading("Relevant Projects", level=1)
@@ -58,6 +58,21 @@ def generate_docx(candidate: CandidateProfile, job: Job) -> tuple[Path, dict]:
 
     doc.add_heading("Target Role", level=1)
     doc.add_paragraph(job.title)
-
     doc.save(path)
+    return path
+
+
+def generate_docx_from_plan(
+    candidate: CandidateProfile,
+    job: Job,
+    plan: ResumePlan,
+) -> tuple[Path, dict]:
+    content = plan.model_dump()
+    return _write_docx(candidate, job, content, "_tailored")
+
+
+def generate_docx(candidate: CandidateProfile, job: Job) -> tuple[Path, dict]:
+    match = match_job(job, candidate).model_dump()
+    content = AIService().tailor_resume(_candidate_dict(candidate), _job_dict(job), match)
+    path = _write_docx(candidate, job, content, "")
     return path, content
