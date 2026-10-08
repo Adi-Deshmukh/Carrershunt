@@ -5,7 +5,7 @@ from app.schemas.agent import MatchDecision, ResumePlan, StructuredJob
 from app.services.claim_validator import validate_resume_plan
 from app.services.evidence import retrieve_evidence
 from app.services.eligibility import evaluate_hard_eligibility
-from app.services.job_intelligence import parse_job
+from app.services.job_intelligence import SKILLS, _contains, parse_job
 from app.services.matching import match_job
 from app.services.semantic_match import hybrid_match_score
 
@@ -75,6 +75,13 @@ class AgentService:
                 if skill_lower in matched or skill_lower in candidate_text:
                     if skill not in grounded_skills:
                         grounded_skills.append(skill)
+            # If the JD has few/no recognized skills, retain verified candidate
+            # skills so a valid resume does not collapse into summary-only output.
+            for skill in SKILLS:
+                if len(grounded_skills) >= 12:
+                    break
+                if _contains(candidate.resume_text or "", skill) and skill not in grounded_skills:
+                    grounded_skills.append(skill)
             plan = ResumePlan(
                 summary=f"{candidate.name} with {candidate.experience_years:g} years of experience aligned to {structured.title}.",
                 skills=grounded_skills,
