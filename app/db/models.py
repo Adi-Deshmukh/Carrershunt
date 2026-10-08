@@ -75,6 +75,25 @@ class CandidateProfile(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class CandidateEvidence(Base):
+    __tablename__ = "candidate_evidence"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("candidate_profiles.id"), index=True)
+    source: Mapped[str] = mapped_column(String(50), index=True)
+    source_key: Mapped[str] = mapped_column(String(500))
+    evidence_type: Mapped[str] = mapped_column(String(50), index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    content: Mapped[str] = mapped_column(Text)
+    url: Mapped[str | None] = mapped_column(String(1500))
+    metadata_json: Mapped[str] = mapped_column(Text, default="{}")
+    fingerprint: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    candidate: Mapped["CandidateProfile"] = relationship(back_populates="evidence_records")
+
+
 class ResumeVersion(Base):
     __tablename__ = "resume_versions"
 
