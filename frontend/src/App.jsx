@@ -152,7 +152,7 @@ function Candidate({ candidate, refresh }) {
     e.preventDefault();setBusy(true);setMessage("");
     try{
       const existing=candidate?.id;
-      if(!existing){
+      if(existing){ const r=await api(`/candidates/${existing}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({...form,graduation_year:form.graduation_year?Number(form.graduation_year):null,experience_years:Number(form.experience_years)||0})}); setMessage("Profile updated."); await refresh(); return; }\n      if(!existing){
         const r=await api("/candidates",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...form,graduation_year:form.graduation_year?Number(form.graduation_year):null,experience_years:Number(form.experience_years)||0,resume_text:"Master resume pending",evidence:{}})});
         setMessage(`Candidate created (#${r.id}). Upload the master resume below.`);
         await refresh();
