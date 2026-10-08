@@ -17,6 +17,14 @@ def _contains(text: str, term: str) -> bool:
     return re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text, re.I) is not None
 
 
+def _is_hard_requirement(text: str, term: str) -> bool:
+    for match in re.finditer(re.escape(term), text, re.I):
+        context = text[max(0, match.start() - 80): match.end() + 80].lower()
+        if not re.search(r"preferred|nice to have|plus|bonus|desired", context):
+            return True
+    return False
+
+
 def parse_job(job: Job) -> StructuredJob:
     text = f"{job.title}\n{job.description or ''}"
     required = [skill for skill in SKILLS if _contains(text, skill)]
@@ -26,17 +34,23 @@ def parse_job(job: Job) -> StructuredJob:
         r"(?:minimum|at least)\s+(\d+(?:\.\d+)?)\s*years?",
     ]
     for pattern in patterns:
-        match = re.search(pattern, text, re.I)
-        if match:
-            years = max(years, float(match.group(1)))
+        for match in re.finditer(pattern, text, re.I):
+            context = text[max(0, match.start() - 50): match.end() + 80].lower()
+            if not re.search(r"preferred|nice to have|plus|bonus|desired", context):
+                years = max(years, float(match.group(1)))
 
-    education = []
-    for term in ("bachelor", "b.tech", "b.s.", "master", "m.tech", "m.s."):
-        if _contains(text, term):
-            education.append(term)
+    education = [
+        term for term in ("bachelor", "b.tech", "b.s.", "master", "m.tech", "m.s.")
+        if _contains(text, term) and _is_hard_requirement(text, term)
+    ]
 
     authorization = []
-    if re.search(r"work authorization|authorized to work|visa sponsorship", text, re.I):
+    if re.search(
+        r"(must|requires|required).{0,60}(work authorization|authorized to work)"
+        r"|(?:no|without)\s+(?:visa\s+)?sponsorship",
+        text,
+        re.I,
+    ):
         authorization.append("authorized")
 
     seniority = None
