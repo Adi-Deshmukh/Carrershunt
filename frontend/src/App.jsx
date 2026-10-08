@@ -47,7 +47,7 @@ function Overview({ stats, jobs, companies, candidate, go }) {
     <div className="metrics">
       <Metric label="OPEN ROLES" value={stats.jobs} hint="from imported companies" />
       <Metric label="COMPANIES" value={stats.companies} hint="tracked sources" />
-      <Metric label="MATCHED" value={stats.matched} hint="pipeline runs" />
+      <Metric label="PROCESSABLE" value={stats.matched} hint="roles ready to analyze" />
       <Metric label="APPLICATIONS" value={stats.applications} hint="tracked outcomes" />
     </div>
 
