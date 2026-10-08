@@ -33,6 +33,9 @@ async def import_company_excel(
     ingestion = []
     for company_data in result.imported:
         company = upsert_company(db, company_data)
+        db.commit()
+        db.refresh(company)
+        stored.append(company)
         try:
             jobs = await ingest_company_jobs(db, company)
             ingestion.append({
@@ -43,21 +46,16 @@ async def import_company_excel(
                 "status": "completed",
             })
         except Exception as exc:
-            # Keep successful companies/jobs even if one source fails.
+            # Keep the company even when its source cannot be scraped.
             db.rollback()
-            company = db.get(Company, company.id)
             ingestion.append({
-                "company_id": company.id if company else None,
-                "company": company_data.name,
-                "platform": company.platform if company else None,
+                "company_id": company.id,
+                "company": company.name,
+                "platform": company.platform,
                 "jobs_ingested": 0,
                 "status": "failed",
                 "error": str(exc)[:500],
             })
-            continue
-        stored.append(company)
-
-    db.commit()
 
     candidate = db.scalar(select(CandidateProfile).order_by(CandidateProfile.id.desc()))
     pipeline_results = []
