@@ -78,6 +78,10 @@ class CandidateProfile(Base):
         back_populates="candidate",
         cascade="all, delete-orphan",
     )
+    pipeline_runs: Mapped[list["PipelineRun"]] = relationship(
+        back_populates="candidate",
+        cascade="all, delete-orphan",
+    )
 
 
 class CandidateEvidence(Base):
@@ -97,6 +101,21 @@ class CandidateEvidence(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     candidate: Mapped["CandidateProfile"] = relationship(back_populates="evidence_records")
+
+
+class PipelineRun(Base):
+    __tablename__ = "pipeline_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("candidate_profiles.id"), index=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"), index=True)
+    status: Mapped[str] = mapped_column(String(40), default="queued", index=True)
+    result_json: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    candidate: Mapped["CandidateProfile"] = relationship(back_populates="pipeline_runs")
 
 
 class ResumeVersion(Base):
@@ -131,7 +150,7 @@ class OutreachMessage(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"))
-    person_id: Mapped[int] = mapped_column(ForeignKey("people.id"), nullable=True)
+    person_id: Mapped[int | None] = mapped_column(ForeignKey("people.id"), nullable=True)
     channel: Mapped[str] = mapped_column(String(30))
     subject: Mapped[str | None] = mapped_column(String(500))
     body: Mapped[str] = mapped_column(Text)
