@@ -49,4 +49,6 @@ class PipelineResult(BaseModel):
     match: MatchDecision
     resume: ResumePlan | None = None
     resume_generated: bool = False
+    resume_id: int | None = None
+    resume_download_url: str | None = None
     validation_errors: list[str] = Field(default_factory=list)
