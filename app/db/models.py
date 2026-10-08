@@ -74,6 +74,11 @@ class CandidateProfile(Base):
     evidence_json: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+    evidence_records: Mapped[list["CandidateEvidence"]] = relationship(
+        back_populates="candidate",
+        cascade="all, delete-orphan",
+    )
+
 
 class CandidateEvidence(Base):
     __tablename__ = "candidate_evidence"
