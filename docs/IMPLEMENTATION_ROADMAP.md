@@ -24,11 +24,11 @@ DONE = implemented. NEXT = immediate work. LATER = deliberately deferred.
 
 | Item | Status |
 |---|---|
-| CandidateEvidence | NEXT |
-| Resume evidence extraction | NEXT |
-| GitHub ingestion | NEXT |
-| Evidence normalization | NEXT |
-| Retrieval interface | NEXT |
+| CandidateEvidence | DONE |
+| Resume evidence extraction | DONE |
+| GitHub ingestion | DONE |
+| Evidence normalization | DONE |
+| Retrieval interface | DONE |
 | LinkedIn/public profile import | LATER/optional |
 | Embeddings | LATER |
 | pgvector | LATER |
