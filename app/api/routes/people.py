@@ -14,6 +14,8 @@ router = APIRouter(prefix="/people", tags=["people"])
 @router.get("/search")
 async def search_people(company: str, role: str, skills: str = ""):
     provider = SerperPeopleProvider()
+    if not __import__("app.core.config", fromlist=["settings"]).settings.serper_api_key:
+        raise HTTPException(status_code=503, detail="Serper API key is not configured. Add it in Settings.")
     result = await provider.search(company, role, [s.strip() for s in skills.split(",") if s.strip()])
     return {"results": [r.__dict__ for r in result]}
 
