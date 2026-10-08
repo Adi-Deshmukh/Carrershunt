@@ -10,4 +10,4 @@ class CandidateCreate(BaseModel):
     location: str | None = None
     work_authorization: str | None = None
     resume_text: str
-    evidence: dict = {}
+    evidence: dict = Field(default_factory=dict)
