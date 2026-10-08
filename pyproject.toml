@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "carrershunt"
-version = "0.1.0"
+version = "0.2.0"
 description = "AI-powered job discovery and resume tailoring platform"
 requires-python = ">=3.11"
 dependencies = [
@@ -21,7 +21,8 @@ dependencies = [
     "beautifulsoup4>=4.12,<5.0",
     "python-docx>=1.1,<2.0",
     "pypdf>=5.0,<7.0",
-    "openai>=1.100,<2.0"
+    "openai>=1.100,<2.0",
+    "langgraph==1.2.14"
 ]
 
 [project.optional-dependencies]
@@ -34,4 +35,3 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["app*"]
-
