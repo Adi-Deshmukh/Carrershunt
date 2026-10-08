@@ -11,6 +11,10 @@ from app.schemas.company import CompanyCreate
 
 _URL_ADAPTER = TypeAdapter(HttpUrl)
 REQUIRED_COLUMNS = {"company", "careers_url"}
+COLUMN_ALIASES = {
+    "company": {"company", "company_name", "name"},
+    "careers_url": {"careers_url", "careers url", "career_url", "career url", "url", "jobs_url", "jobs url"},
+}
 
 
 @dataclass
@@ -48,10 +52,20 @@ def import_companies(file_bytes: bytes) -> ImportResult:
     normalized_columns = {
         str(column).strip().lower(): column for column in df.columns
     }
-    missing = REQUIRED_COLUMNS - set(normalized_columns)
+    resolved_columns = {}
+    for required, aliases in COLUMN_ALIASES.items():
+        match = next(
+            (normalized_columns[alias] for alias in aliases if alias in normalized_columns),
+            None,
+        )
+        if match is not None:
+            resolved_columns[required] = match
+    missing = REQUIRED_COLUMNS - set(resolved_columns)
     if missing:
         raise ValueError(
-            "Missing required columns: " + ", ".join(sorted(missing))
+            "Missing required columns: "
+            + ", ".join(sorted(missing))
+            + ". Accepted names include Company/company_name and Careers URL/careers_url."
         )
 
     imported: list[CompanyCreate] = []
@@ -60,8 +74,8 @@ def import_companies(file_bytes: bytes) -> ImportResult:
     seen: set[tuple[str, str]] = set()
 
     for row_number, row in enumerate(df.to_dict(orient="records"), start=2):
-        raw_name = row[normalized_columns["company"]]
-        raw_url = row[normalized_columns["careers_url"]]
+        raw_name = row[resolved_columns["company"]]
+        raw_url = row[resolved_columns["careers_url"]]
 
         if pd.isna(raw_name) or pd.isna(raw_url):
             invalid.append(
