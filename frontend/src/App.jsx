@@ -57,6 +57,18 @@ async function supabaseAuth(endpoint, payload) {
   return data;
 }
 
+async function ensureSupabaseProfile(session, name = "") {
+  if (!SUPABASE_CONFIGURED || !session?.access_token || !session.user?.id) return;
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(session.user.id)}&select=id`, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` },
+  });
+  if (!response.ok) throw new Error("Could not load your Supabase profile.");
+  const rows = await response.json();
+  if (!rows.length) {
+    await syncSupabaseProfile(session, { name, email: session.user.email });
+  }
+}
+
 async function syncSupabaseProfile(session, values = {}) {
   if (!SUPABASE_CONFIGURED || !session?.access_token || !session.user?.id) return;
   const row = {
@@ -112,16 +124,13 @@ function AuthScreen({ onAuthenticated }) {
           return;
         }
         const session = saveSession(result);
-        await syncSupabaseProfile(session, { name: name.trim(), email: email.trim() });
+        await ensureSupabaseProfile(session, name.trim());
         onAuthenticated(session);
         return;
       }
       const result = await supabaseAuth("token?grant_type=password", { email: email.trim(), password });
       const session = saveSession(result);
-      await syncSupabaseProfile(session, {
-        name: session.user?.user_metadata?.full_name || email.split("@")[0],
-        email: session.user?.email || email,
-      });
+      await ensureSupabaseProfile(session, session.user?.user_metadata?.full_name || email.split("@")[0]);
       onAuthenticated(session);
     } catch (e) {
       setError(e.message);
@@ -420,8 +429,11 @@ function Candidate({ candidate, refresh }) {
             experience_years: Number(form.experience_years) || 0,
           }),
         });
-        setMessage("Profile updated.");
         await refresh();
+        const latest = await api("/candidates/latest");
+        const session = await getValidSession();
+        if (session) await syncSupabaseProfile(session, latest || form);
+        setMessage("Profile updated and synced to your account.");
         return;
       }
       const r = await api("/candidates", {
@@ -435,8 +447,11 @@ function Candidate({ candidate, refresh }) {
           evidence: {},
         }),
       });
-      setMessage(`Candidate created (#${r.id}). Upload the master resume below.`);
       await refresh();
+      const latest = await api("/candidates/latest");
+      const session = await getValidSession();
+      if (session) await syncSupabaseProfile(session, latest || form);
+      setMessage(`Candidate created (#${r.id}). Upload the master resume below.`);
     } catch (e) {
       setMessage(e.message);
     } finally {
@@ -446,7 +461,7 @@ function Candidate({ candidate, refresh }) {
   const uploadResume=async()=>{
     if(!candidate?.id||!resume)return;
     setBusy(true);setMessage("");
-    try{const b=new FormData();b.append("file",resume);const r=await api(`/candidates/${candidate.id}/resume`,{method:"POST",body:b});setMessage(`Master resume indexed: ${r.characters_extracted.toLocaleString()} characters.`);await refresh();}
+    try{const b=new FormData();b.append("file",resume);const r=await api(`/candidates/${candidate.id}/resume`,{method:"POST",body:b});await refresh();const latest=await api("/candidates/latest");const session=await getValidSession();if(session)await syncSupabaseProfile(session,latest||form);setMessage(`Master resume indexed: ${r.characters_extracted.toLocaleString()} characters and synced to your account.`);}
     catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
   const syncGithub=async()=>{
