@@ -27,7 +27,7 @@ USER_AGENT = (
 
 
 def _clean(value: str | None) -> str:
-    return re.sub(r"\\s+", " ", value or "").strip()
+    return re.sub(r"\s+", " ", value or "").strip()
 
 
 def _absolute_http_url(url: str | None, base_url: str) -> str | None:
