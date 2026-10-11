@@ -69,9 +69,9 @@ def _ats_platform(url: str) -> str | None:
 def _looks_like_job(title: str, url: str) -> bool:
     """Return True only for URL shapes that plausibly identify one job posting.
 
-    A careers-site link containing words like "engineering" or "careers" is
-    not enough: company culture, benefits, products, and resource pages often
-    live under those same paths. Prefer explicit job-detail URL patterns.
+    Careers-site links containing words like "engineering" or "careers" are
+    not enough: culture, benefits, products, and resource pages often live
+    under those same paths. Prefer explicit job-detail URL patterns.
     """
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -82,25 +82,11 @@ def _looks_like_job(title: str, url: str) -> bool:
     if not parts:
         return False
 
-    # These are informational/culture/product routes, not job postings, even
-    # when nested beneath a /careers/ path or linked from a careers homepage.
-    excluded_segments = {
-        "resources", "resource", "teams", "team", "engineering", "sales",
-        "earlycareers", "early-careers", "all-jobs", "alljobs", "employee-awards",
-        "awards", "teamanywhere", "team-anywhere", "team-everyone", "benefits",
-        "perk-and-benefits", "interviewing", "applying", "career-growth",
-        "products", "product", "try", "trust", "marketplace", "developer",
-        "partners", "contact", "about", "culture", "values", "locations",
-        "categories", "jobs-by-location", "jobs-by-category", "join",
-    }
-    if any(part in excluded_segments for part in parts):
-        return False
-
-    last = parts[-1]
     listing_pages = {
         "careers", "career", "jobs", "job", "all-jobs", "openings",
         "positions", "vacancies", "current-openings", "search",
     }
+    last = parts[-1]
     if last in listing_pages:
         return False
 
@@ -110,10 +96,10 @@ def _looks_like_job(title: str, url: str) -> bool:
         return len(parts) >= 3 and parts[-2] == "jobs" and parts[-1].isdigit()
     if platform == "lever":
         # Lever detail URLs use /<company>/<posting-slug>.
-        return len(parts) >= 2 and parts[-1] not in listing_pages
+        return len(parts) >= 2 and last not in listing_pages
     if platform == "ashby":
         # Ashby detail URLs use /<company>/<posting-slug-or-id>.
-        return len(parts) >= 2 and parts[-1] not in listing_pages
+        return len(parts) >= 2 and last not in listing_pages
 
     # Explicit job routes, including Atlassian Talent Community's
     # /atlassian-talent-community/jobs/<posting-id>.
@@ -125,18 +111,35 @@ def _looks_like_job(title: str, url: str) -> bool:
             if remainder and remainder[-1] not in listing_pages:
                 return True
 
+    # Exclude common informational routes only after checking explicit job
+    # routes, so category paths such as /careers/engineering/jobs/123 remain valid.
+    excluded_segments = {
+        "resources", "resource", "teams", "team", "earlycareers", "early-careers",
+        "all-jobs", "alljobs", "employee-awards", "awards", "teamanywhere",
+        "team-anywhere", "team-everyone", "benefits", "perk-and-benefits",
+        "interviewing", "applying", "career-growth", "products", "product",
+        "try", "trust", "marketplace", "developer", "partners", "contact",
+        "about", "culture", "values", "locations", "categories",
+        "jobs-by-location", "jobs-by-category", "join",
+    }
+    if any(part in excluded_segments for part in parts):
+        return False
+
     # Some ATS vendors use /careers/<posting-id> or /careers/details/<slug>.
     for marker in ("career", "careers"):
         if marker in parts:
             index = parts.index(marker)
             remainder = parts[index + 1:]
-            if len(remainder) >= 2 and remainder[0] in {"detail", "details", "job", "jobs", "position", "positions"}:
+            if len(remainder) >= 2 and remainder[0] in {
+                "detail", "details", "job", "jobs", "position", "positions"
+            }:
                 return True
-            if len(remainder) == 1 and (remainder[0].isdigit() or re.fullmatch(r"[a-f0-9]{8,}", remainder[0])):
+            if len(remainder) == 1 and (
+                remainder[0].isdigit() or re.fullmatch(r"[a-f0-9]{8,}", remainder[0])
+            ):
                 return True
 
     return False
-
 
 def _json_job_postings(soup: BeautifulSoup) -> list[dict]:
     postings: list[dict] = []
