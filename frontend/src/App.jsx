@@ -602,6 +602,20 @@ function Settings() {
 export default function App() {
   const [page,setPage]=useState("overview"); const [data,setData]=useState({jobs:[],companies:[],applications:[],candidate:null}); const [loading,setLoading]=useState(true);
   const [authSession,setAuthSession]=useState(()=>SUPABASE_CONFIGURED ? null : readStoredSession());
+  const [apiHealth,setApiHealth]=useState("checking");
+  useEffect(()=>{
+    let active=true; let timer;
+    const check=async()=>{
+      try{
+        const response=await fetch(`${API_BASE}/health`);
+        const result=response.ok?await response.json():null;
+        if(active)setApiHealth(result?.status==="ok"?"online":"offline");
+      }catch{if(active)setApiHealth("offline")}
+      if(active)timer=setTimeout(check,30000);
+    };
+    check();
+    return ()=>{active=false;if(timer)clearTimeout(timer)};
+  },[]);
   useEffect(()=>{
     if(!SUPABASE_CONFIGURED) return;
     let active=true;
@@ -616,7 +630,7 @@ export default function App() {
   return <div className="app-shell">
     <aside className="sidebar"><div className="brand"><div className="brand-mark">CS</div><div><strong>Carrershunt</strong><span>Candidate Intelligence</span></div></div>
       <nav>{nav.map(([id,label,icon])=><button key={id} className={page===id?"active":""} onClick={()=>setPage(id)}><span className="nav-icon">{icon}</span>{label}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="api-status"><span className="pulse"/>API connected</div><div className="version">v0.2.0 · local control plane</div></div>
+      <div className="sidebar-bottom"><div className="api-status"><span className={`pulse ${apiHealth==="offline"?"offline":""}`}/>{apiHealth==="online"?"API connected":apiHealth==="checking"?"Checking API…":"API unavailable"}</div><div className="version">v0.2.0 · local control plane</div></div>
     </aside>
     <main><header className="topbar"><div className="crumb">CARRERSHUNT <span>/</span> {nav.find(x=>x[0]===page)?.[1].toUpperCase()}</div><div className="topbar-actions"><button className="refresh" onClick={refresh}>↻ Refresh</button>{SUPABASE_CONFIGURED && <button className="signout" onClick={()=>{clearSession();setAuthSession(null);setData({jobs:[],companies:[],applications:[],candidate:null});setPage("overview")}}>Sign out</button>}</div></header>
       {page==="overview"&&<Overview stats={stats} jobs={data.jobs} companies={data.companies} candidate={data.candidate} go={setPage}/>}
