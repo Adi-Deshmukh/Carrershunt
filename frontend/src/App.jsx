@@ -1,6 +1,155 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
+const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+const SUPABASE_CONFIGURED = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+const SESSION_KEY = "carrershunt.supabase.session";
+
+function readStoredSession() {
+  try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null"); }
+  catch { return null; }
+}
+
+function saveSession(session) {
+  const normalized = {
+    ...session,
+    expires_at: session.expires_at || Math.floor(Date.now() / 1000) + (session.expires_in || 3600),
+  };
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(normalized));
+  return normalized;
+}
+
+function clearSession() {
+  sessionStorage.removeItem(SESSION_KEY);
+}
+
+async function getValidSession() {
+  const session = readStoredSession();
+  if (!session?.access_token) return null;
+  if ((session.expires_at || 0) > Math.floor(Date.now() / 1000) + 60) return session;
+  if (!session.refresh_token || !SUPABASE_CONFIGURED) {
+    clearSession();
+    return null;
+  }
+  try {
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    });
+    if (!response.ok) throw new Error("Session refresh failed");
+    return saveSession(await response.json());
+  } catch {
+    clearSession();
+    return null;
+  }
+}
+
+async function supabaseAuth(endpoint, payload) {
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/${endpoint}`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.msg || data.message || data.error_description || "Supabase authentication failed.");
+  return data;
+}
+
+async function syncSupabaseProfile(session, values = {}) {
+  if (!SUPABASE_CONFIGURED || !session?.access_token || !session.user?.id) return;
+  const row = {
+    id: session.user.id,
+    full_name: values.name ?? values.full_name ?? session.user.user_metadata?.full_name ?? "",
+    email: values.email ?? session.user.email ?? "",
+    education: values.education ?? null,
+    graduation_year: values.graduation_year ? Number(values.graduation_year) : null,
+    experience_years: Number(values.experience_years) || 0,
+    location: values.location ?? null,
+    work_authorization: values.work_authorization ?? null,
+    resume_text: values.resume_text ?? "",
+    evidence: values.evidence ?? {},
+  };
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/profiles?on_conflict=id`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${session.access_token}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify(row),
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Supabase profile save failed: ${detail.slice(0, 240)}`);
+  }
+}
+
+function AuthScreen({ onAuthenticated }) {
+  const [mode, setMode] = useState("signin");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setBusy(true); setMessage(""); setError("");
+    try {
+      if (mode === "signup") {
+        const result = await supabaseAuth("signup", {
+          email: email.trim(),
+          password,
+          data: { full_name: name.trim() },
+        });
+        if (!result.access_token || !result.user) {
+          setMessage("Account created. Check your email to confirm the address, then sign in.");
+          setMode("signin");
+          return;
+        }
+        const session = saveSession(result);
+        await syncSupabaseProfile(session, { name: name.trim(), email: email.trim() });
+        onAuthenticated(session);
+        return;
+      }
+      const result = await supabaseAuth("token?grant_type=password", { email: email.trim(), password });
+      const session = saveSession(result);
+      await syncSupabaseProfile(session, {
+        name: session.user?.user_metadata?.full_name || email.split("@")[0],
+        email: session.user?.email || email,
+      });
+      onAuthenticated(session);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return <div className="auth-shell">
+    <div className="auth-card">
+      <div className="brand-mark auth-mark">CS</div>
+      <div className="eyebrow">CANDIDATE INTELLIGENCE</div>
+      <h1>{mode === "signup" ? "Create your account" : "Sign in to Carrershunt"}</h1>
+      <p>Keep your candidate profile and resume private to your account.</p>
+      <form onSubmit={submit} className="auth-form">
+        {mode === "signup" && <label>Full name<input autoComplete="name" value={name} onChange={e=>setName(e.target.value)} required maxLength={200} placeholder="Your name"/></label>}
+        <label>Email<input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="you@example.com"/></label>
+        <label>Password<input type="password" autoComplete={mode === "signup" ? "new-password" : "current-password"} value={password} onChange={e=>setPassword(e.target.value)} required minLength={6} placeholder="At least 6 characters"/></label>
+        {error && <div className="notice notice-error" role="alert">{error}</div>}
+        {message && <div className="notice" role="status">{message}</div>}
+        <button className="primary full" disabled={busy}>{busy ? <><span className="spinner" aria-hidden="true"/> {mode === "signup" ? "Creating account…" : "Signing in…"}</> : mode === "signup" ? "Create account" : "Sign in"}</button>
+      </form>
+      <button className="auth-switch" disabled={busy} onClick={()=>{setMode(mode==="signup"?"signin":"signup");setError("");setMessage("");}}>
+        {mode === "signup" ? "Already have an account? Sign in" : "New to Carrershunt? Create an account"}
+      </button>
+    </div>
+  </div>;
+}
 
 const nav = [
   ["overview", "Overview", "⌂"],
@@ -13,7 +162,10 @@ const nav = [
 ];
 
 async function api(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, options);
+  const headers = new Headers(options.headers || {});
+  const session = await getValidSession();
+  if (session?.access_token) headers.set("Authorization", `Bearer ${session.access_token}`);
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
   const type = res.headers.get("content-type") || "";
   const data = type.includes("application/json") ? await res.json() : await res.text();
   if (!res.ok) {
@@ -431,16 +583,24 @@ function Settings() {
 
 export default function App() {
   const [page,setPage]=useState("overview"); const [data,setData]=useState({jobs:[],companies:[],applications:[],candidate:null}); const [loading,setLoading]=useState(true);
+  const [authSession,setAuthSession]=useState(()=>SUPABASE_CONFIGURED ? null : readStoredSession());
+  useEffect(()=>{
+    if(!SUPABASE_CONFIGURED) return;
+    let active=true;
+    getValidSession().then(session=>{if(active)setAuthSession(session)}).catch(()=>{if(active)setAuthSession(null)});
+    return ()=>{active=false};
+  },[]);
   const refresh=async()=>{setLoading(true);try{const [jobs,companies,applications,candidate]=await Promise.all([api("/jobs"),api("/companies"),api("/applications"),api("/candidates/latest")]);setData({jobs,companies,applications,candidate})}catch(e){console.error(e)}finally{setLoading(false)}};
-  useEffect(()=>{refresh()},[]);
-  const stats=useMemo(()=>({jobs:data.jobs.length,companies:data.companies.length,applications:data.applications.length,matched:data.jobs.length}),[data]);
+  useEffect(()=>{if(!SUPABASE_CONFIGURED || authSession)refresh()},[authSession?.user?.id]);
+  const stats=useMemo(()=>({jobs:data.jobs.length,companies:data.companies.length,applications:data.applications.length,matched:data.jobs.filter(j=>j.description && j.description.length>=100).length}),[data]);
+  if(SUPABASE_CONFIGURED && !authSession) return <AuthScreen onAuthenticated={setAuthSession}/>;
   if(loading&&!data.jobs.length&&!data.companies.length) return <div className="splash"><div className="logo">CS</div><strong>Carrershunt</strong><span>Loading control center…</span></div>;
   return <div className="app-shell">
     <aside className="sidebar"><div className="brand"><div className="brand-mark">CS</div><div><strong>Carrershunt</strong><span>Candidate Intelligence</span></div></div>
       <nav>{nav.map(([id,label,icon])=><button key={id} className={page===id?"active":""} onClick={()=>setPage(id)}><span className="nav-icon">{icon}</span>{label}</button>)}</nav>
       <div className="sidebar-bottom"><div className="api-status"><span className="pulse"/>API connected</div><div className="version">v0.2.0 · local control plane</div></div>
     </aside>
-    <main><header className="topbar"><div className="crumb">CARRERSHUNT <span>/</span> {nav.find(x=>x[0]===page)?.[1].toUpperCase()}</div><button className="refresh" onClick={refresh}>↻ Refresh</button></header>
+    <main><header className="topbar"><div className="crumb">CARRERSHUNT <span>/</span> {nav.find(x=>x[0]===page)?.[1].toUpperCase()}</div><div className="topbar-actions"><button className="refresh" onClick={refresh}>↻ Refresh</button>{SUPABASE_CONFIGURED && <button className="signout" onClick={()=>{clearSession();setAuthSession(null);setData({jobs:[],companies:[],applications:[],candidate:null});setPage("overview")}}>Sign out</button>}</div></header>
       {page==="overview"&&<Overview stats={stats} jobs={data.jobs} companies={data.companies} candidate={data.candidate} go={setPage}/>}
       {page==="jobs"&&<Jobs jobs={data.jobs} companies={data.companies} candidate={data.candidate} refresh={refresh}/>}
       {page==="companies"&&<Companies companies={data.companies} refresh={refresh} go={setPage}/>}
