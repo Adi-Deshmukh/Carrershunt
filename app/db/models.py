@@ -171,6 +171,18 @@ class Application(Base):
 
 
 
+class UserApplication(Base):
+    __tablename__ = "user_applications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    supabase_user_id: Mapped[str] = mapped_column(String(36), index=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"), index=True)
+    status: Mapped[str] = mapped_column(String(50), default="discovered")
+    notes: Mapped[str | None] = mapped_column(Text)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class IngestionRun(Base):
     __tablename__ = "ingestion_runs"
 
