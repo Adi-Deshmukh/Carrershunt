@@ -58,15 +58,16 @@ async function supabaseAuth(endpoint, payload) {
 }
 
 async function ensureSupabaseProfile(session, name = "") {
-  if (!SUPABASE_CONFIGURED || !session?.access_token || !session.user?.id) return;
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(session.user.id)}&select=id`, {
+  if (!SUPABASE_CONFIGURED || !session?.access_token || !session.user?.id) {
+    throw new Error("Supabase authentication is not configured.");
+  }
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(session.user.id)}&select=*`, {
     headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` },
   });
   if (!response.ok) throw new Error("Could not load your Supabase profile.");
   const rows = await response.json();
-  if (!rows.length) {
-    await syncSupabaseProfile(session, { name, email: session.user.email });
-  }
+  if (rows.length) return rows[0];
+  return await syncSupabaseProfile(session, { name, email: session.user.email });
 }
 
 async function syncSupabaseProfile(session, values = {}) {
@@ -97,6 +98,56 @@ async function syncSupabaseProfile(session, values = {}) {
     const detail = await response.text();
     throw new Error(`Supabase profile save failed: ${detail.slice(0, 240)}`);
   }
+  return row;
+}
+
+async function ensureBackendCandidate(session, profile) {
+  if (!session?.access_token) return;
+  const headers = { Authorization: `Bearer ${session.access_token}` };
+  const currentResponse = await fetch(`${API_BASE}/candidates/latest`, { headers });
+  if (!currentResponse.ok) {
+    throw new Error("Could not check the local candidate profile.");
+  }
+  const current = await currentResponse.json();
+  if (current?.id) return current;
+
+  const body = {
+    name: profile?.full_name || session.user?.user_metadata?.full_name || session.user?.email?.split("@")[0] || "Candidate",
+    email: profile?.email || session.user?.email || "",
+    education: profile?.education || "",
+    graduation_year: profile?.graduation_year || null,
+    experience_years: Number(profile?.experience_years) || 0,
+    location: profile?.location || "",
+    work_authorization: profile?.work_authorization || "",
+    resume_text: profile?.resume_text || "Master resume pending",
+    evidence: profile?.evidence || {},
+  };
+  const createResponse = await fetch(`${API_BASE}/candidates`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!createResponse.ok) {
+    const detail = await createResponse.text();
+    throw new Error(`Could not initialize your candidate profile: ${detail.slice(0, 180)}`);
+  }
+  return await createResponse.json();
+}
+
+async function signOutSupabase(session) {
+  try {
+    if (SUPABASE_CONFIGURED && session?.access_token) {
+      await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+    }
+  } finally {
+    clearSession();
+  }
 }
 
 function AuthScreen({ onAuthenticated }) {
@@ -124,14 +175,28 @@ function AuthScreen({ onAuthenticated }) {
           return;
         }
         const session = saveSession(result);
-        await ensureSupabaseProfile(session, name.trim());
-        onAuthenticated(session);
+        try {
+          const profile = await ensureSupabaseProfile(session, name.trim());
+          try { await ensureBackendCandidate(session, profile); }
+          catch (profileError) { console.warn("Local candidate profile initialization will need a retry:", profileError); }
+          onAuthenticated(session);
+        } catch (profileError) {
+          clearSession();
+          throw profileError;
+        }
         return;
       }
       const result = await supabaseAuth("token?grant_type=password", { email: email.trim(), password });
       const session = saveSession(result);
-      await ensureSupabaseProfile(session, session.user?.user_metadata?.full_name || email.split("@")[0]);
-      onAuthenticated(session);
+      try {
+        const profile = await ensureSupabaseProfile(session, session.user?.user_metadata?.full_name || email.split("@")[0]);
+        try { await ensureBackendCandidate(session, profile); }
+        catch (profileError) { console.warn("Local candidate profile initialization will need a retry:", profileError); }
+        onAuthenticated(session);
+      } catch (profileError) {
+        clearSession();
+        throw profileError;
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -608,7 +673,20 @@ function Settings() {
 }
 
 
-export default function App() {
+export default function ConfigurationRequiredScreen() {
+  return <div className="auth-shell">
+    <div className="auth-card">
+      <div className="brand-mark auth-mark">CS</div>
+      <div className="eyebrow">ACCOUNT SECURITY</div>
+      <h1>Connect Supabase to continue</h1>
+      <p>Login is fail-closed until the Supabase project URL and publishable key are configured. This prevents the dashboard from silently opening without authentication.</p>
+      <div className="notice notice-error">Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY.</div>
+      <p>Copy <code>frontend/.env.example</code> to <code>frontend/.env</code>, confirm both values, then restart Vite.</p>
+    </div>
+  </div>;
+}
+
+function App() {
   const [page,setPage]=useState("overview"); const [data,setData]=useState({jobs:[],companies:[],applications:[],candidate:null}); const [loading,setLoading]=useState(true);
   const [authSession,setAuthSession]=useState(()=>SUPABASE_CONFIGURED ? null : readStoredSession());
   const [apiHealth,setApiHealth]=useState("checking");
@@ -632,16 +710,17 @@ export default function App() {
     return ()=>{active=false};
   },[]);
   const refresh=async()=>{setLoading(true);try{const [jobs,companies,applications,candidate]=await Promise.all([api("/jobs"),api("/companies"),api("/applications"),api("/candidates/latest")]);setData({jobs,companies,applications,candidate})}catch(e){console.error(e)}finally{setLoading(false)}};
-  useEffect(()=>{if(!SUPABASE_CONFIGURED || authSession)refresh()},[authSession?.user?.id]);
+  useEffect(()=>{if(SUPABASE_CONFIGURED && authSession)refresh()},[authSession?.user?.id]);
   const stats=useMemo(()=>({jobs:data.jobs.length,companies:data.companies.length,applications:data.applications.length,matched:data.jobs.filter(j=>j.job_url && j.description && j.description.length>=100).length}),[data]);
-  if(SUPABASE_CONFIGURED && !authSession) return <AuthScreen onAuthenticated={setAuthSession}/>;
+  if(!SUPABASE_CONFIGURED) return <ConfigurationRequiredScreen/>;
+  if(!authSession) return <AuthScreen onAuthenticated={setAuthSession}/>;
   if(loading&&!data.jobs.length&&!data.companies.length) return <div className="splash"><div className="logo">CS</div><strong>Carrershunt</strong><span>Loading control center…</span></div>;
   return <div className="app-shell">
     <aside className="sidebar"><div className="brand"><div className="brand-mark">CS</div><div><strong>Carrershunt</strong><span>Candidate Intelligence</span></div></div>
       <nav>{nav.map(([id,label,icon])=><button key={id} className={page===id?"active":""} onClick={()=>setPage(id)}><span className="nav-icon">{icon}</span>{label}</button>)}</nav>
       <div className="sidebar-bottom"><div className="api-status"><span className={`pulse ${apiHealth==="offline"?"offline":""}`}/>{apiHealth==="online"?"API connected":apiHealth==="checking"?"Checking API…":"API unavailable"}</div><div className="version">v0.2.0 · local control plane</div></div>
     </aside>
-    <main><header className="topbar"><div className="crumb">CARRERSHUNT <span>/</span> {nav.find(x=>x[0]===page)?.[1].toUpperCase()}</div><div className="topbar-actions"><button className="refresh" onClick={refresh}>↻ Refresh</button>{SUPABASE_CONFIGURED && <button className="signout" onClick={()=>{clearSession();setAuthSession(null);setData({jobs:[],companies:[],applications:[],candidate:null});setPage("overview")}}>Sign out</button>}</div></header>
+    <main><header className="topbar"><div className="crumb">CARRERSHUNT <span>/</span> {nav.find(x=>x[0]===page)?.[1].toUpperCase()}</div><div className="topbar-actions"><button className="refresh" onClick={refresh}>↻ Refresh</button>{SUPABASE_CONFIGURED && <button className="signout" onClick={async()=>{const session=await getValidSession();try{await signOutSupabase(session)}finally{setAuthSession(null);setData({jobs:[],companies:[],applications:[],candidate:null});setPage("overview")}}}>Sign out</button>}</div></header>
       {page==="overview"&&<Overview stats={stats} jobs={data.jobs} companies={data.companies} candidate={data.candidate} go={setPage}/>}
       {page==="jobs"&&<Jobs jobs={data.jobs} companies={data.companies} candidate={data.candidate} refresh={refresh}/>}
       {page==="companies"&&<Companies companies={data.companies} refresh={refresh} go={setPage}/>}
