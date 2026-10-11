@@ -30,18 +30,19 @@ The retrieval layer is provider-independent. It starts with structured/keyword r
 
 The complete Phase 2 workflow is now connected:
 
-Raw Job -> Job Intelligence Agent -> Structured JD -> Candidate Intelligence Agent -> Evidence Retrieval -> Match Agent -> Hard Eligibility + Evidence-Grounded Fit -> Resume Agent -> Deterministic Claim Validation -> DOCX Resume -> Persistent Pipeline Run
+Raw Job -> Job Intelligence Agent -> Structured JD -> Candidate Intelligence Agent -> Evidence Retrieval -> Match Agent -> Hard Eligibility + Evidence-Grounded Fit -> Resume Plan + Deterministic Claim Validation -> Persistent Pipeline Run -> User reviews JD -> Explicit Create Resume action -> Quality-checked DOCX
 
-Phase 2 includes LangGraph orchestration, structured job extraction, evidence-grounded matching, hard eligibility checks, deterministic claim validation, validated DOCX generation, persistent pipeline runs, and end-to-end tests. LLM use is optional; hard eligibility and claim validation remain deterministic.
+Phase 2 includes LangGraph orchestration, structured job extraction, evidence-grounded matching, hard eligibility checks, deterministic claim validation, persistent pipeline runs, and a user-triggered DOCX generation endpoint. Job analysis does not create a DOCX. LLM use is optional; hard eligibility and claim validation remain deterministic.
 
 ## Current backend
 
 - Company Excel ingestion and persistence
+- Durable DB-backed ingestion queue with concurrent workers and progress endpoint
 - Greenhouse, Lever, Ashby, and generic job ingestion
 - Job normalization and deduplication
 - Candidate evidence storage and retrieval
 - Deterministic eligibility and skill matching
-- AI-grounded tailored DOCX generation
+- AI-grounded tailored DOCX generation on explicit user request
 - Public professional profile discovery
 - Human-reviewed outreach drafting
 - Application tracking
@@ -55,6 +56,7 @@ Phase 2 includes LangGraph orchestration, structured job extraction, evidence-gr
 5. Add OPENAI_API_KEY only if AI tailoring is required.
 6. Add SERPER_API_KEY for public-profile discovery.
 7. Run FastAPI with uvicorn.
+8. In a second terminal, run the durable scraping/matching workers: `python -m app.workers.ingestion_worker --workers 4`. Keep the worker process running while ingestion tasks are expected to execute.
 
 The default database is SQLite for local development. Use PostgreSQL in production.
 
@@ -72,13 +74,15 @@ Candidate intelligence
 -> Company Excel
 -> Career platform detection
 -> Job ingestion
--> Eligibility + matching
--> Evidence retrieval
--> Tailored resume
+-> Background eligibility + matching
+-> Evidence retrieval + resume plan
+-> User reviews the full job description
+-> User clicks Create tailored resume
+-> Quality checks + DOCX download
 -> Public people discovery
 -> Outreach draft
 -> Application tracking
 
 The system does not automatically send mass outreach. Generated messages remain drafts for user review.
 
-See docs/ARCHITECTURE.md, docs/IMPLEMENTATION_ROADMAP.md, and docs/CHANGELOG.md.
+See docs/ARCHITECTURE.md, docs/IMPLEMENTATION_ROADMAP.md, docs/ASYNC_INGESTION_DESIGN.md, and docs/CHANGELOG.md.
