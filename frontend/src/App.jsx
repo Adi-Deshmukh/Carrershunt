@@ -16,7 +16,15 @@ async function api(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, options);
   const type = res.headers.get("content-type") || "";
   const data = type.includes("application/json") ? await res.json() : await res.text();
-  if (!res.ok) throw new Error(data?.detail || data?.message || "Request failed");
+  if (!res.ok) {
+    const detail = data?.detail;
+    const message = typeof detail === "string"
+      ? detail
+      : [detail?.message, ...(detail?.validation_errors || [])].filter(Boolean).join(" ")
+        || data?.message
+        || "Request failed";
+    throw new Error(message);
+  }
   return data;
 }
 
