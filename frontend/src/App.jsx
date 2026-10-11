@@ -551,6 +551,7 @@ function Settings() {
     <div className="page">
       <div className="page-head"><div><div className="eyebrow">SYSTEM CONFIGURATION</div><h1>Settings</h1><p>Configure integrations from the dashboard. Secrets are sent only to your Carrershunt backend.</p></div></div>
       {status && <div className="notice">{status}</div>}
+      {SUPABASE_CONFIGURED && <div className="warning-box">Account mode is enabled. Integration keys are shared server configuration, so configure them in the backend environment rather than saving them here. Per-account encrypted key storage is not implemented yet.</div>}
       {info && <div className="chips" style={{marginBottom:"1rem"}}>
         <span style={{marginRight:"0.5rem"}}>Provider: <strong>{info.ai_provider}</strong></span>
         {(info.configured_providers||[]).map(p => <Badge key={p} tone="success">{p} ✓</Badge>)}
@@ -590,7 +591,7 @@ function Settings() {
           <label>Serper API key<input type="password" value={form.serper_api_key} onChange={set("serper_api_key")} placeholder="For people search"/></label>
         </div>
         <div className="settings-note">Security: the backend holds these values in process memory only — they are lost on restart. For production, replace with encrypted secret storage and authentication.</div>
-        <button className="primary" onClick={save}>Save integration settings</button>
+        <button className="primary" disabled={SUPABASE_CONFIGURED} onClick={save}>Save integration settings</button>
       </section>
     </div>
   );
