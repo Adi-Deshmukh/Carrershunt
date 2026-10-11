@@ -673,7 +673,7 @@ function Settings() {
 }
 
 
-export default function ConfigurationRequiredScreen() {
+function ConfigurationRequiredScreen() {
   return <div className="auth-shell">
     <div className="auth-card">
       <div className="brand-mark auth-mark">CS</div>
@@ -686,7 +686,7 @@ export default function ConfigurationRequiredScreen() {
   </div>;
 }
 
-function App() {
+export default function App() {
   const [page,setPage]=useState("overview"); const [data,setData]=useState({jobs:[],companies:[],applications:[],candidate:null}); const [loading,setLoading]=useState(true);
   const [authSession,setAuthSession]=useState(()=>SUPABASE_CONFIGURED ? null : readStoredSession());
   const [apiHealth,setApiHealth]=useState("checking");
