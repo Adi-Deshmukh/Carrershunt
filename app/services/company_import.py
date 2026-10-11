@@ -50,7 +50,7 @@ def import_companies(file_bytes: bytes) -> ImportResult:
     df = pd.read_excel(BytesIO(file_bytes))
 
     normalized_columns = {
-        str(column).strip().lower(): column for column in df.columns
+        str(column).strip().lower().replace(" ", "_"): column for column in df.columns
     }
     resolved_columns = {}
     for required, aliases in COLUMN_ALIASES.items():
