@@ -27,6 +27,22 @@ def ensure_schema_compatibility(engine: Engine) -> None:
                 "length(trim(coalesce(description, ''))) < 100 OR "
                 "job_url = (SELECT careers_url FROM companies WHERE companies.id = jobs.company_id)"
             ))
+    if "ingestion_runs" in tables:
+        columns = {column["name"] for column in inspector.get_columns("ingestion_runs")}
+        if "supabase_user_id" not in columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE ingestion_runs ADD COLUMN supabase_user_id VARCHAR(36)"))
+        with engine.begin() as connection:
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_ingestion_runs_supabase_user_id "
+                "ON ingestion_runs (supabase_user_id)"
+            ))
+    if "candidate_profiles" in tables:
+        with engine.begin() as connection:
+            connection.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_candidate_profiles_supabase_user_id "
+                "ON candidate_profiles (supabase_user_id) WHERE supabase_user_id IS NOT NULL"
+            ))
     if "resume_versions" in tables:
         columns = {column["name"] for column in inspector.get_columns("resume_versions")}
         if "candidate_id" not in columns:
