@@ -257,6 +257,7 @@ function Jobs({ jobs, companies, candidate, refresh }) {
   const [message, setMessage] = useState("");
   const [creatingResume, setCreatingResume] = useState(false);
   const isAnalyzing = Object.values(running).some(Boolean);
+  const isBusy = isAnalyzing || creatingResume;
   const canAnalyze = Boolean(candidate?.resume_text && candidate.resume_text !== "Master resume pending" && candidate.resume_text.trim().length >= 100);
 
   const createResume = async () => {
@@ -313,11 +314,11 @@ function Jobs({ jobs, companies, candidate, refresh }) {
       <div className="panel-head"><div><h2>{jobs.length} roles in pipeline</h2><span>Click a role to inspect its latest analysis.</span></div></div>
       {jobs.length ? <div className="job-grid">{jobs.map(j => {
         const company = companies.find(c => c.id === j.company_id);
-        return <article className="job-card" key={j.id} onClick={() => openResult(j)}>
+        return <article className={selected?.id === j.id ? "job-card selected" : "job-card"} key={j.id} onClick={() => {if(!isBusy) openResult(j)}}>
           <div className="job-top"><Badge>{j.source || "source"}</Badge><span className="job-id">#{j.id}</span></div>
           <h3>{j.title}</h3><p>{company?.name || "Unknown company"} · {j.location || "Location not specified"}</p>
           <div className="job-meta"><span>{j.employment_type || "Role"}</span>{j.job_url ? <a href={j.job_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>View role ↗</a> : <span>Posting URL unavailable</span>}{j.apply_url && j.apply_url !== j.job_url && <a href={j.apply_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>Apply ↗</a>}</div>
-          <button className="primary full analyze-button" disabled={!canAnalyze || isAnalyzing || !j.description || j.description.trim().length < 100 || !j.job_url} title={!canAnalyze ? "Upload a real master resume first" : (!j.description || j.description.trim().length < 100) ? "This posting has no usable description; re-ingest the company" : ""} onClick={e => {e.stopPropagation();run(j, false)}}>{running[j.id] ? <><span className="spinner" aria-hidden="true" /> Analyzing role…</> : isAnalyzing ? "Waiting for analysis…" : (!j.description || j.description.trim().length < 100) ? "Job details unavailable" : !canAnalyze ? "Upload master resume first" : "Analyze role"}</button>
+          <button className="primary full analyze-button" disabled={!canAnalyze || isBusy || !j.description || j.description.trim().length < 100 || !j.job_url} title={!canAnalyze ? "Upload a real master resume first" : (!j.description || j.description.trim().length < 100) ? "This posting has no usable description; re-ingest the company" : ""} onClick={e => {e.stopPropagation();run(j, false)}}>{running[j.id] ? <><span className="spinner" aria-hidden="true" /> Analyzing role…</> : isBusy ? "Processing…" : (!j.description || j.description.trim().length < 100) ? "Job details unavailable" : !canAnalyze ? "Upload master resume first" : "Analyze role"}</button>
         </article>
       })}</div> : <Empty title="No jobs imported" text="Go to Companies, upload your Excel, then ingest the sources." />}
     </section>
@@ -609,7 +610,7 @@ export default function App() {
   },[]);
   const refresh=async()=>{setLoading(true);try{const [jobs,companies,applications,candidate]=await Promise.all([api("/jobs"),api("/companies"),api("/applications"),api("/candidates/latest")]);setData({jobs,companies,applications,candidate})}catch(e){console.error(e)}finally{setLoading(false)}};
   useEffect(()=>{if(!SUPABASE_CONFIGURED || authSession)refresh()},[authSession?.user?.id]);
-  const stats=useMemo(()=>({jobs:data.jobs.length,companies:data.companies.length,applications:data.applications.length,matched:data.jobs.filter(j=>j.description && j.description.length>=100).length}),[data]);
+  const stats=useMemo(()=>({jobs:data.jobs.length,companies:data.companies.length,applications:data.applications.length,matched:data.jobs.filter(j=>j.job_url && j.description && j.description.length>=100).length}),[data]);
   if(SUPABASE_CONFIGURED && !authSession) return <AuthScreen onAuthenticated={setAuthSession}/>;
   if(loading&&!data.jobs.length&&!data.companies.length) return <div className="splash"><div className="logo">CS</div><strong>Carrershunt</strong><span>Loading control center…</span></div>;
   return <div className="app-shell">
