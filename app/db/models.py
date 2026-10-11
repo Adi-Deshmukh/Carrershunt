@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -173,6 +173,7 @@ class Application(Base):
 
 class UserApplication(Base):
     __tablename__ = "user_applications"
+    __table_args__ = (UniqueConstraint("supabase_user_id", "job_id", name="uq_user_applications_owner_job"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     supabase_user_id: Mapped[str] = mapped_column(String(36), index=True)
@@ -187,6 +188,7 @@ class IngestionRun(Base):
     __tablename__ = "ingestion_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    supabase_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(40), default="queued", index=True)
     total_companies: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
