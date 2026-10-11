@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.core.config import settings as app_settings
+from app.core.auth import supabase_enabled
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -72,6 +73,11 @@ def get_settings():
 
 @router.post("")
 def update_settings(data: SettingsUpdate):
+    if supabase_enabled():
+        raise HTTPException(
+            status_code=409,
+            detail="Integration keys are currently server-wide. To prevent one account from overwriting another user's configuration, set keys in the backend environment. Per-account encrypted secret storage is not enabled yet.",
+        )
     if data.ai_provider is not None and data.ai_provider not in VALID_PROVIDERS:
         raise HTTPException(status_code=422, detail="ai_provider must be auto, gemini, grok, or openai")
     if (
