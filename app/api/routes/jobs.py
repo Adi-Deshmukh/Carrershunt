@@ -2,22 +2,32 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import Company, Job
+from app.db.models import Company, IngestionRun, IngestionTask, Job
 from app.db.session import get_db
-from app.services.job_service import ingest_company_jobs
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
-@router.post("/ingest/company/{company_id}")
-async def ingest_jobs(company_id: int, db: Session = Depends(get_db)):
+@router.post("/ingest/company/{company_id}", status_code=202)
+def ingest_jobs(company_id: int, db: Session = Depends(get_db)):
+    """Queue a company crawl; the HTTP request never waits on the remote website."""
     company = db.get(Company, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    jobs = await ingest_company_jobs(db, company)
-    return {"company_id": company.id, "platform": company.platform, "jobs_ingested": len(jobs)}
-
+    run = IngestionRun(total_companies=1, status="queued")
+    db.add(run)
+    db.flush()
+    db.add(IngestionTask(run_id=run.id, task_type="scrape_company", company_id=company.id, status="queued"))
+    db.commit()
+    db.refresh(run)
+    return {
+        "company_id": company.id,
+        "ingestion_run_id": run.id,
+        "platform": company.platform,
+        "status": "queued",
+        "queued_companies": 1,
+    }
 
 @router.get("")
 def list_jobs(db: Session = Depends(get_db)):
