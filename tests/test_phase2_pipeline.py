@@ -70,7 +70,7 @@ def test_docx_is_created_only_after_explicit_resume_request():
     assert result.resume_generated is False
     assert db.query(ResumeVersion).count() == 0
 
-    response = tailor_resume(job.id, db)
+    response = tailor_resume(job.id, db, {"id": None})
 
     assert response["resume_id"] is not None
     assert response["download_url"] == f"/resumes/{response['resume_id']}/download"
