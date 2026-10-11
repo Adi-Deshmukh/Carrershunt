@@ -38,7 +38,8 @@ Phase 2 includes LangGraph orchestration, structured job extraction, evidence-gr
 
 - Company Excel ingestion and persistence
 - Durable DB-backed ingestion queue with concurrent workers and progress endpoint
-- Greenhouse, Lever, Ashby, and generic job ingestion
+- Greenhouse, Lever, Ashby, generic HTML, sitemap, and Playwright-rendered job ingestion
+- Verified job URLs and description-length validation; placeholder postings are rejected
 - Job normalization and deduplication
 - Candidate evidence storage and retrieval
 - Deterministic eligibility and skill matching
@@ -51,12 +52,17 @@ Phase 2 includes LangGraph orchestration, structured job extraction, evidence-gr
 
 1. Create a Python 3.11+ environment.
 2. Install the project with the dev dependencies.
-3. Copy .env.example to .env.
-4. Add GITHUB_TOKEN for a higher GitHub API rate limit (optional for public repositories).
-5. Add OPENAI_API_KEY only if AI tailoring is required.
-6. Add SERPER_API_KEY for public-profile discovery.
-7. Run FastAPI with uvicorn.
-8. In a second terminal, run the durable scraping/matching workers: `python -m app.workers.ingestion_worker --workers 4`. Keep the worker process running while ingestion tasks are expected to execute.
+3. Copy `.env.example` to `.env`.
+4. Add `GITHUB_TOKEN` for a higher GitHub API rate limit (optional for public repositories).
+5. Add AI provider keys if you want LLM-assisted analysis; deterministic matching can run without them.
+6. Add `SERPER_API_KEY` for public-profile discovery.
+7. For local JS-rendered careers crawling, install the browser: `playwright install chromium`.
+8. To enable accounts, create a Supabase project, apply `supabase/migrations/202610110001_profiles.sql` in the Supabase SQL Editor, then set `SUPABASE_URL` and `SUPABASE_ANON_KEY` in the backend `.env`. Copy `frontend/.env.example` to `frontend/.env` and set matching `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. Use only the publishable/anon key in the frontend; never put the service-role key in Vite variables.
+9. Run FastAPI with `uvicorn app.main:app --reload`.
+10. In a second terminal, run the durable crawler workers: `python -m app.workers.ingestion_worker --workers 4`. Keep them running while ingestion tasks are expected to execute.
+11. In a third terminal, run the frontend: `cd frontend && npm ci && npm run dev`.
+
+When Supabase credentials are configured, API routes require a valid Supabase access token. Candidate profiles, resume artifacts, pipeline runs, ingestion progress, and application tracking are scoped to the signed-in account. Company and job catalogues remain shared discovery data. The local SQL database continues to store normalized jobs and pipeline artifacts; Supabase Auth and `public.profiles` store the account and synchronized profile. Per-account encrypted integration-key storage is not implemented, so integration keys must be configured through the backend environment in account mode.
 
 The default database is SQLite for local development. Use PostgreSQL in production.
 
@@ -72,10 +78,10 @@ POST /candidates/{candidate_id}/evidence/search
 
 Candidate intelligence
 -> Company Excel
--> Career platform detection
--> Job ingestion
--> Background eligibility + matching
--> Evidence retrieval + resume plan
+-> Career platform detection + source-specific/browser crawling
+-> Verified job ingestion
+-> User clicks Analyze role
+-> Candidate matching + evidence retrieval + resume plan
 -> User reviews the full job description
 -> User clicks Create tailored resume
 -> Quality checks + DOCX download
