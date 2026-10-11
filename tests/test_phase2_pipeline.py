@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.api.routes.resumes import tailor_resume
 from app.db.models import Base, CandidateProfile, Company, Job, ResumeVersion
 from app.services.job_intelligence import parse_job
 from app.services.pipeline_service import run_pipeline
@@ -58,6 +59,22 @@ def test_phase2_pipeline_is_end_to_end():
     assert result.validation_errors == []
     # Analysis prepares a plan only; the DOCX is created by the explicit resume endpoint.
     assert db.query(ResumeVersion).count() == 0
+
+
+
+def test_docx_is_created_only_after_explicit_resume_request():
+    db, candidate, job = make_fixture()
+    result = run_pipeline(db, candidate, job, use_llm=False)
+
+    assert result.resume is not None
+    assert result.resume_generated is False
+    assert db.query(ResumeVersion).count() == 0
+
+    response = tailor_resume(job.id, db)
+
+    assert response["resume_id"] is not None
+    assert response["download_url"] == f"/resumes/{response['resume_id']}/download"
+    assert db.query(ResumeVersion).count() == 1
 
 
 def test_preferred_degree_is_not_a_hard_failure():
