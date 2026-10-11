@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.applications import router as applications_router
@@ -17,6 +17,8 @@ from app.api.routes.resumes import router as resumes_router
 from app.api.routes.settings import router as settings_router
 from app.db.models import Base
 from app.db.session import engine
+from app.db.migrations import ensure_schema_compatibility
+from app.core.auth import get_current_user
 
 APP_VERSION = "0.2.0"
 
@@ -24,6 +26,7 @@ APP_VERSION = "0.2.0"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    ensure_schema_compatibility(engine)
     yield
 
 
@@ -42,18 +45,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(candidates_router)
-app.include_router(companies_router)
-app.include_router(jobs_router)
-app.include_router(matches_router)
-app.include_router(resumes_router)
-app.include_router(people_router)
-app.include_router(applications_router)
-app.include_router(evidence_router)
-app.include_router(github_router)
-app.include_router(resume_ingestion_router)
-app.include_router(pipeline_router)
-app.include_router(settings_router)
+app.include_router(candidates_router, dependencies=[Depends(get_current_user)])
+app.include_router(companies_router, dependencies=[Depends(get_current_user)])
+app.include_router(jobs_router, dependencies=[Depends(get_current_user)])
+app.include_router(matches_router, dependencies=[Depends(get_current_user)])
+app.include_router(resumes_router, dependencies=[Depends(get_current_user)])
+app.include_router(people_router, dependencies=[Depends(get_current_user)])
+app.include_router(applications_router, dependencies=[Depends(get_current_user)])
+app.include_router(evidence_router, dependencies=[Depends(get_current_user)])
+app.include_router(github_router, dependencies=[Depends(get_current_user)])
+app.include_router(resume_ingestion_router, dependencies=[Depends(get_current_user)])
+app.include_router(pipeline_router, dependencies=[Depends(get_current_user)])
+app.include_router(settings_router, dependencies=[Depends(get_current_user)])
 
 
 @app.get("/health")
