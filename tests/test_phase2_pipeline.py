@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.models import Base, CandidateProfile, Company, Job
+from app.db.models import Base, CandidateProfile, Company, Job, ResumeVersion
 from app.services.job_intelligence import parse_job
 from app.services.pipeline_service import run_pipeline
 
@@ -52,10 +52,12 @@ def test_phase2_pipeline_is_end_to_end():
     assert result.match.eligible is True
     assert result.match.fit_score > 0
     assert result.resume is not None
-    assert result.resume_generated is True
-    assert result.resume_id is not None
-    assert result.resume_download_url == f"/resumes/{result.resume_id}/download"
+    assert result.resume_generated is False
+    assert result.resume_id is None
+    assert result.resume_download_url is None
     assert result.validation_errors == []
+    # Analysis prepares a plan only; the DOCX is created by the explicit resume endpoint.
+    assert db.query(ResumeVersion).count() == 0
 
 
 def test_preferred_degree_is_not_a_hard_failure():
