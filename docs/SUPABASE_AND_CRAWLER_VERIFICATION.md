@@ -20,11 +20,11 @@ Supabase stores Auth identity and the synchronized `public.profiles` row. Compan
 
 Run using a copy of the actual company spreadsheet and representative careers URLs you are authorized to crawl.
 
-1. Upload the actual spreadsheet through Companies → import. Manually reconcile imported, duplicate, and invalid-row counts.
-2. Ensure queued jobs are handled by a running worker. Local command: `python -m app.workers.ingestion_worker --workers 4`.
+1. If you want to start over, use Companies → Reset my workspace first. This deletes your candidate profile and account-owned ingestion artifacts, and removes company/job records only when no other signed-in account references them. It keeps your login active. Then upload the actual spreadsheet through Companies → Upload Excel. Reconcile imported, duplicate, and invalid-row counts.
+2. FastAPI starts four ingestion workers by default for local development. Start the API with `uvicorn app.main:app --reload`; do not also start the standalone worker unless `ENABLE_INGESTION_WORKER=false` is set.
 3. Exercise at least one known-good Greenhouse, Lever, Ashby, ordinary HTML careers page, and JavaScript-rendered careers page if present in the real spreadsheet.
 4. For each company, inspect ingestion-run/task status and error text. Manually compare discovered job title, canonical URL, location, full description, and apply URL against the source page.
-5. Verify invalid URLs, redirected login pages, blocked pages, careers indexes without actual postings, and non-job pages are rejected rather than saved as fake postings.
+5. Verify invalid URLs, redirected login pages, blocked pages, careers indexes without actual postings, and non-job pages are rejected rather than saved as fake postings. A fresh Excel import marks prior jobs stale before the new crawl when the source is not shared with another signed-in account.
 6. Re-run ingestion and verify URL variants do not create duplicate jobs. Record expected, discovered, ingested, skipped, failed, and manually verified-valid counts by company.
 
 ## Acceptance criteria
