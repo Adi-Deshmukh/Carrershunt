@@ -166,3 +166,40 @@ class Application(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     applied_at: Mapped[datetime | None] = mapped_column(DateTime)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+
+class IngestionRun(Base):
+    __tablename__ = "ingestion_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    status: Mapped[str] = mapped_column(String(40), default="queued", index=True)
+    total_companies: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    tasks: Mapped[list["IngestionTask"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+
+
+class IngestionTask(Base):
+    __tablename__ = "ingestion_tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("ingestion_runs.id"), index=True)
+    task_type: Mapped[str] = mapped_column(String(40), default="scrape_company", index=True)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id"), nullable=True, index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(40), default="queued", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    jobs_ingested: Mapped[int] = mapped_column(Integer, default=0)
+    worker_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    run: Mapped["IngestionRun"] = relationship(back_populates="tasks")
+    company: Mapped["Company | None"] = relationship()
