@@ -46,8 +46,9 @@ Carrershunt includes an Auth-backed `public.profiles` table migration, session-b
 1. From the repository root, run `python scripts/configure_supabase_env.py`. It creates/updates the root `.env` and `frontend/.env`, preserves other existing settings, and sets the Carrershunt Supabase project values.
 2. Restart FastAPI and Vite. Login is fail-closed: the dashboard does not open if the frontend Supabase configuration is missing.
 3. Configure email/password under Supabase Auth, then set the Site URL and allowed redirect URLs for localhost and the actual frontend deployment.
-4. Test sign-up, sign-in, sign-out, session refresh, profile read/write, and account isolation with two accounts. On sign-up/sign-in, the app ensures a Supabase profile row and initializes a local candidate record if one does not exist.
-5. Keep generated `.env` files out of Git. The publishable key is intended for browser use; never put a secret/service-role key in any `VITE_*` variable.
+4. Run `python scripts/smoke_test_supabase_auth.py` and choose sign-up or sign-in. The script prompts locally for credentials without saving them, then verifies the Auth session and profile read/write. If email confirmation is enabled, confirm the email and rerun in sign-in mode.
+5. Test sign-out, session refresh, and account isolation with two accounts. On sign-up/sign-in, the app ensures a Supabase profile row and initializes a local candidate record if one does not exist.
+6. Keep generated `.env` files out of Git. The publishable key is intended for browser use; never put a secret/service-role key in any `VITE_*` variable.
 
 See [the Supabase and live crawler verification checklist](docs/SUPABASE_AND_CRAWLER_VERIFICATION.md).
 
