@@ -2,6 +2,7 @@ from urllib.parse import urlparse
 
 from app.services.job_sources.ashby import AshbySource
 from app.services.job_sources.base import JobSource
+from app.services.job_sources.company_careers import CompanyCareersSource
 from app.services.job_sources.generic import GenericSource
 from app.services.job_sources.greenhouse import GreenhouseSource
 from app.services.job_sources.lever import LeverSource
@@ -17,10 +18,18 @@ def detect_platform(url: str) -> str:
         return "lever"
     if "ashby" in host or "ashbyhq" in path:
         return "ashby"
+    if host == "atlassian.com" or host.endswith(".atlassian.com") or host == "join.atlassian.com":
+        return "atlassian"
+    if host == "google.com" or host.endswith(".google.com"):
+        return "google"
+    if host == "careers.microsoft.com":
+        return "microsoft"
     return "generic"
 
 
 def get_source(platform: str) -> JobSource:
+    if platform in {"atlassian", "google", "microsoft"}:
+        return CompanyCareersSource()
     return {
         "greenhouse": GreenhouseSource(),
         "lever": LeverSource(),
