@@ -22,6 +22,14 @@ services:
       - db
       - redis
 
+  worker:
+    build: .
+    command: python -m app.workers.ingestion_worker --workers ${INGESTION_WORKERS:-4}
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/carrershunt
+    depends_on:
+      - db
+
   db:
     image: postgres:17
     environment:
