@@ -59,6 +59,11 @@ def claim_task(worker_id: str) -> int | None:
         if claimed.rowcount != 1:
             db.rollback()
             return None
+        task = db.get(IngestionTask, task_id)
+        run = db.get(IngestionRun, task.run_id) if task else None
+        if run is not None:
+            run.status = "running"
+            run.updated_at = now
         db.commit()
         return task_id
 
