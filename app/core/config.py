@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str = "sqlite:///./carrershunt.db"
     redis_url: str = "redis://localhost:6379/0"
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
 
     ai_provider: str = "auto"
     ai_primary_provider: str = "gemini"
