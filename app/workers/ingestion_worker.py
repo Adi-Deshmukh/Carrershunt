@@ -28,7 +28,7 @@ from app.services.job_service import ingest_company_jobs
 
 MAX_ATTEMPTS = 3
 POLL_SECONDS = 1.0
-TERMINAL_STATES = {"completed", "failed", "skipped"}
+TERMINAL_STATES = {"completed", "completed_with_warnings", "failed", "skipped"}
 
 
 def claim_task(worker_id: str) -> int | None:
@@ -96,12 +96,17 @@ async def process_task(task_id: int, worker_id: str) -> None:
                     raise ValueError("Company record no longer exists")
                 jobs = await ingest_company_jobs(db, company)
                 task.jobs_ingested = len(jobs)
+                if not jobs:
+                    task.error = "No verifiable job postings found. The careers page may require JavaScript rendering, block automated requests, or contain no open roles."
+                    task.status = "completed_with_warnings"
+                else:
+                    task.error = None
 
             else:
                 raise ValueError(f"Unsupported ingestion task type: {task.task_type}")
 
-            task.status = "completed"
-            task.error = None
+            if task.status != "completed_with_warnings":
+                task.status = "completed"
             task.finished_at = datetime.utcnow()
             task.updated_at = datetime.utcnow()
             db.commit()
