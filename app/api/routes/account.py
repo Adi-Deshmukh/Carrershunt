@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
@@ -65,9 +65,13 @@ def reset_account_workspace(
         other_task = db.scalar(
             select(IngestionTask.id)
             .join(IngestionRun, IngestionTask.run_id == IngestionRun.id)
-            .where(IngestionTask.company_id == company_id, IngestionRun.id.not_in(run_ids))
+            .where(
+                IngestionTask.company_id == company_id,
+                IngestionRun.supabase_user_id.is_not(None),
+                IngestionRun.supabase_user_id != owner_id,
+            )
             .limit(1)
-        ) if run_ids else None
+        )
         if other_task is not None:
             continue
 
@@ -84,7 +88,10 @@ def reset_account_workspace(
         )
         other_resume = db.scalar(
             select(ResumeVersion.id)
-            .where(ResumeVersion.job_id.in_(job_ids), ResumeVersion.candidate_id.not_in(candidate_ids))
+            .where(
+                ResumeVersion.job_id.in_(job_ids),
+                or_(ResumeVersion.candidate_id.is_(None), ResumeVersion.candidate_id.not_in(candidate_ids)),
+            )
             .limit(1)
         )
         other_application = db.scalar(
@@ -118,6 +125,8 @@ def reset_account_workspace(
             db.execute(delete(ResumeVersion).where(ResumeVersion.job_id.in_(safe_job_ids)))
             deleted_jobs = len(safe_job_ids)
             db.execute(delete(Job).where(Job.id.in_(safe_job_ids)))
+        # Remove any legacy anonymous task references before deleting companies.
+        db.execute(delete(IngestionTask).where(IngestionTask.company_id.in_(safe_company_ids)))
         db.execute(delete(Person).where(Person.company_id.in_(safe_company_ids)))
         db.execute(delete(Company).where(Company.id.in_(safe_company_ids)))
 
