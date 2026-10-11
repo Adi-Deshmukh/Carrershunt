@@ -20,6 +20,12 @@ def test_atlassian_talent_community_job_detail_is_accepted():
         "https://join.atlassian.com/atlassian-talent-community/jobs/25540",
     )
 
+def test_job_detail_under_a_department_category_is_accepted():
+    assert _looks_like_job(
+        "Software Engineer",
+        "https://example.com/company/careers/engineering/jobs/12345",
+    )
+
 
 def test_supported_ats_job_details_are_accepted_but_board_indexes_are_not():
     assert _looks_like_job("Software Engineer", "https://boards.greenhouse.io/example/jobs/12345")
