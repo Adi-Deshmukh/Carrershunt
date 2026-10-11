@@ -105,14 +105,22 @@ async def process_task(task_id: int, worker_id: str) -> None:
                 )
                 if candidate:
                     for job in jobs:
-                        db.add(
-                            IngestionTask(
-                                run_id=run_id,
-                                task_type="pipeline_job",
-                                job_id=job.id,
-                                status="queued",
+                        already_queued = db.scalar(
+                            select(IngestionTask.id).where(
+                                IngestionTask.run_id == run_id,
+                                IngestionTask.task_type == "pipeline_job",
+                                IngestionTask.job_id == job.id,
                             )
                         )
+                        if already_queued is None:
+                            db.add(
+                                IngestionTask(
+                                    run_id=run_id,
+                                    task_type="pipeline_job",
+                                    job_id=job.id,
+                                    status="queued",
+                                )
+                            )
             elif task.task_type == "pipeline_job":
                 job = db.get(Job, task.job_id) if task.job_id else None
                 candidate = db.scalar(
