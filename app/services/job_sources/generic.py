@@ -160,6 +160,64 @@ def _canonical_url(soup: BeautifulSoup, fallback_url: str) -> str:
 class GenericSource(JobSource):
     name = "generic"
 
+    async def _render_page(self, url: str) -> str | None:
+        """Render JavaScript-driven career pages when Playwright + Chromium are installed."""
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            return None
+        try:
+            async with async_playwright() as playwright:
+                browser = await playwright.chromium.launch(headless=True)
+                try:
+                    page = await browser.new_page(user_agent=USER_AGENT)
+                    await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=5000)
+                    except Exception:
+                        pass
+                    await page.wait_for_timeout(900)
+                    return await page.content()
+                finally:
+                    await browser.close()
+        except Exception:
+            return None
+
+    async def _rendered_detail(self, url: str, title_hint: str) -> JobRecord | None:
+        html = await self._render_page(url)
+        if not html:
+            return None
+        soup = BeautifulSoup(html, "html.parser")
+        rendered_url = _canonical_url(soup, url)
+        postings = _json_job_postings(soup)
+        if postings:
+            record = _posting_to_record(postings[0], rendered_url, allow_base_fallback=True)
+            if record and len(record.description) >= 100:
+                return record
+        h1 = soup.select_one("h1")
+        title = _clean(h1.get_text(" ", strip=True)) if h1 else title_hint
+        description = _page_description(soup)
+        if not title or len(description) < 180:
+            return None
+        apply_url = rendered_url
+        for anchor in soup.select("a[href]"):
+            label = _clean(anchor.get_text(" ", strip=True)).lower()
+            href = _absolute_http_url(anchor.get("href"), rendered_url)
+            if href and any(word in label for word in ("apply now", "apply for this job", "submit application")):
+                apply_url = href
+                break
+        return JobRecord(
+            title=title[:300],
+            location=None,
+            employment_type=None,
+            department=None,
+            description=description,
+            job_url=rendered_url,
+            apply_url=apply_url,
+            source=self.name,
+            source_job_id=None,
+        )
+
     async def _fetch_ats_links(self, soup: BeautifulSoup) -> list[JobRecord]:
         candidates: list[tuple[str, str]] = []
         for link in soup.select("a[href]"):
@@ -319,5 +377,39 @@ class GenericSource(JobSource):
             for record in detail_results:
                 if record and record.job_url:
                     jobs[record.job_url] = record
+
+            # Browser fallback is deliberately only invoked when static HTML did
+            # not yield a usable role. This keeps normal crawls lightweight.
+            if not jobs:
+                rendered_html = await self._render_page(index_url)
+                if rendered_html:
+                    rendered_soup = BeautifulSoup(rendered_html, "html.parser")
+                    ats_records = await self._fetch_ats_links(rendered_soup)
+                    if ats_records:
+                        jobs.update({r.job_url: r for r in ats_records if r.job_url and r.title})
+                    else:
+                        for item in _json_job_postings(rendered_soup):
+                            record = _posting_to_record(item, index_url, allow_base_fallback=False)
+                            if record and record.job_url.rstrip("/") != index_url.rstrip("/"):
+                                jobs[record.job_url] = record
+                        rendered_candidates = []
+                        for link in rendered_soup.select("a[href]"):
+                            title = _clean(link.get_text(" ", strip=True))
+                            absolute = _absolute_http_url(link.get("href"), index_url)
+                            if absolute and title and absolute.rstrip("/") != index_url.rstrip("/") and _looks_like_job(title, absolute):
+                                rendered_candidates.append((title, absolute))
+                        rendered_unique = []
+                        rendered_seen = set()
+                        for title, url in rendered_candidates:
+                            if url not in rendered_seen:
+                                rendered_seen.add(url)
+                                rendered_unique.append((title, url))
+                        rendered_records = await asyncio.gather(*(
+                            self._rendered_detail(url, title)
+                            for title, url in rendered_unique[:12]
+                        ))
+                        for record in rendered_records:
+                            if record and record.job_url:
+                                jobs[record.job_url] = record
 
             return list(jobs.values())
