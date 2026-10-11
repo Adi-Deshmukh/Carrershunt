@@ -94,7 +94,7 @@ def get_import_run(run_id: int, db: Session = Depends(get_db)) -> dict:
     tasks = db.scalars(
         select(IngestionTask).where(IngestionTask.run_id == run_id).order_by(IngestionTask.id)
     ).all()
-    counts = {state: sum(task.status == state for task in tasks) for state in ("queued", "running", "completed", "failed", "skipped")}
+    counts = {state: sum(task.status == state for task in tasks) for state in ("queued", "running", "completed", "completed_with_warnings", "failed", "skipped")}
     return {
         "run_id": run.id,
         "status": run.status,
