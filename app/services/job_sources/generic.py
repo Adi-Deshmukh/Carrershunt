@@ -414,9 +414,15 @@ class GenericSource(JobSource):
                             if url not in rendered_seen:
                                 rendered_seen.add(url)
                                 rendered_unique.append((title, url))
+                        browser_semaphore = asyncio.Semaphore(2)
+
+                        async def render_detail_limited(title: str, url: str) -> JobRecord | None:
+                            async with browser_semaphore:
+                                return await self._rendered_detail(url, title)
+
                         rendered_records = await asyncio.gather(*(
-                            self._rendered_detail(url, title)
-                            for title, url in rendered_unique[:12]
+                            render_detail_limited(title, url)
+                            for title, url in rendered_unique[:8]
                         ))
                         for record in rendered_records:
                             if record and record.job_url:
