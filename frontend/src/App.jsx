@@ -390,7 +390,7 @@ function Companies({ companies, refresh, go }) {
   };
   const ingest = async (id) => {
     setBusy(true); setMessage("");
-    try { const r=await api(`/jobs/ingest/company/${id}`,{method:"POST"}); setMessage(`Ingested ${r.jobs_ingested} jobs.`); await refresh(); }
+    try { const r=await api(`/jobs/ingest/company/${id}`,{method:"POST"}); setRunId(r.ingestion_run_id || null); setRunStatus(null); setMessage(`Queued ${r.queued_companies || 1} company for background crawling.`); }
     catch(e){setMessage(e.message)} finally{setBusy(false)}
   };
   return <div className="page">
@@ -399,7 +399,7 @@ function Companies({ companies, refresh, go }) {
     </div>
     <div className="import-strip"><div className="file-icon">XLS</div><div><strong>Expected columns</strong><span>Company · Careers URL · ATS (optional) · Active (optional)</span></div><div className="import-arrow">Excel → Companies → Jobs</div></div>
     {message && <div className="notice">{message}</div>}
-    {runStatus && <section className="panel"><div className="panel-head"><div><h2>Ingestion run #{runStatus.run_id}</h2><span>Status: {runStatus.status} · {runStatus.jobs_ingested} jobs discovered</span></div><button className="ghost" onClick={()=>go("jobs")}>Open Jobs</button></div><div className="chips"><Badge>Queued {runStatus.task_counts?.queued ?? 0}</Badge><Badge>Running {runStatus.task_counts?.running ?? 0}</Badge><Badge tone="success">Completed {runStatus.task_counts?.completed ?? 0}</Badge><Badge tone="warning">Failed {runStatus.task_counts?.failed ?? 0}</Badge></div>{(runStatus.tasks||[]).filter(t=>t.status==="failed").map(t=><p key={t.id} className="muted">{t.company || `Job #${t.job_id}`} · {t.error}</p>)}</section>}
+    {runStatus && <section className="panel"><div className="panel-head"><div><h2>Ingestion run #{runStatus.run_id}</h2><span>Status: {runStatus.status} · {runStatus.jobs_ingested} jobs discovered</span></div><button className="ghost" onClick={()=>go("jobs")}>Open Jobs</button></div><div className="chips"><Badge>Queued {runStatus.task_counts?.queued ?? 0}</Badge><Badge>Running {runStatus.task_counts?.running ?? 0}</Badge><Badge tone="success">Completed {runStatus.task_counts?.completed ?? 0}</Badge><Badge tone="warning">Warnings {runStatus.task_counts?.completed_with_warnings ?? 0}</Badge><Badge tone="warning">Failed {runStatus.task_counts?.failed ?? 0}</Badge></div>{(runStatus.tasks||[]).filter(t=>t.error).map(t=><p key={t.id} className={t.status==="failed"?"notice-error":"muted"}>{t.company || `Job #${t.job_id}`} · {t.error}</p>)}</section>}
     <section className="panel">
       <div className="panel-head"><div><h2>Tracked sources</h2><span>{companies.length} companies configured</span></div></div>
       {companies.length ? <div className="table-wrap"><table><thead><tr><th>COMPANY</th><th>CAREERS URL</th><th>PLATFORM</th><th>STATUS</th><th></th></tr></thead><tbody>
