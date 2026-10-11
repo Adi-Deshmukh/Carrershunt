@@ -165,6 +165,15 @@ function Companies({ companies, refresh, go }) {
   const [busy, setBusy] = useState(false); const [message,setMessage]=useState("");
   const [runId, setRunId] = useState(null); const [runStatus, setRunStatus] = useState(null);
   useEffect(() => {
+    let active = true;
+    api("/companies/import-runs/latest").then(status => {
+      if (!active) return;
+      setRunStatus(status);
+      if (!["completed", "completed_with_errors"].includes(status.status)) setRunId(status.run_id);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
     if (!runId) return;
     let active = true; let timer;
     const poll = async () => {
