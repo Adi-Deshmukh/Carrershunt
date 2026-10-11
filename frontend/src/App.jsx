@@ -404,7 +404,7 @@ function Jobs({ jobs, companies, candidate, refresh, jobId, navigate }) {
       })}</div> : <Empty title="No jobs imported" text="Go to Companies, upload your Excel, then ingest the sources." />}
     </section>}
 
-    {jobId && !selected && <section className="panel"><Empty title="Loading role…" text="Fetching this role from your imported jobs." /></section>}
+    {jobId && !selected && (jobs.some(job => job.id === Number(jobId)) ? <section className="panel"><Empty title="Loading role…" text="Fetching this role from your imported jobs." /></section> : <section className="panel"><Empty title="Role not found" text="This job ID is not in the current jobs list. Return to Jobs and open a role from your imported data." /><button className="ghost" onClick={() => navigate("jobs")}>Back to jobs</button></section>)}
     {jobId && selected && (!selected.description || selected.description.trim().length < 100) && <section className="panel"><div className="warning-box">This posting has no usable description yet. Re-ingest the company source before analysis.</div></section>}
 
     {selected && (!jobId || selected.id === Number(jobId)) && <section className="panel result-panel">
@@ -763,7 +763,7 @@ function App() {
     </aside>
     <main><header className="topbar"><div className="crumb">CARRERSHUNT <span>/</span> {nav.find(x=>x[0]===page)?.[1].toUpperCase()}</div><div className="topbar-actions"><button className="refresh" onClick={refresh}>↻ Refresh</button>{SUPABASE_CONFIGURED && <button className="signout" onClick={async()=>{const session=await getValidSession();try{await signOutSupabase(session)}finally{setAuthSession(null);setData({jobs:[],companies:[],applications:[],candidate:null});setPage("overview")}}}>Sign out</button>}</div></header>
       {page==="overview"&&<Overview stats={stats} jobs={data.jobs} companies={data.companies} candidate={data.candidate} go={setPage}/>}
-      {page==="jobs"&&<Jobs jobs={data.jobs} companies={data.companies} candidate={data.candidate} refresh={refresh} jobId={route.jobId} navigate={navigate}/ >}
+      {page==="jobs"&&<Jobs jobs={data.jobs} companies={data.companies} candidate={data.candidate} refresh={refresh} jobId={route.jobId} navigate={navigate} />}
       {page==="companies"&&<Companies companies={data.companies} refresh={refresh} go={setPage}/>}
       {page==="candidate"&&<Candidate candidate={data.candidate} refresh={refresh}/>}
       {page==="people"&&<People jobs={data.jobs}/>}
