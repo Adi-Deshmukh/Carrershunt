@@ -66,7 +66,7 @@ def _looks_like_job(title: str, url: str) -> bool:
     last_segment = path.rstrip("/").split("/")[-1] if path.strip("/") else ""
     listing_pages = {"careers", "career", "jobs", "job", "openings", "positions", "vacancies", "current-openings"}
     detail_path = has_job_path and len([part for part in path.split("/") if part]) >= 2 and last_segment not in listing_pages
-    return bool(parsed.scheme in {"http", "https"} and (is_ats or (detail_path and (has_role_word or len([part for part in path.split("/") if part]) >= 2)))
+    return bool(parsed.scheme in {"http", "https"} and (is_ats or (detail_path and (has_role_word or len([part for part in path.split("/") if part]) >= 2))))
 
 
 def _json_job_postings(soup: BeautifulSoup) -> list[dict]:
