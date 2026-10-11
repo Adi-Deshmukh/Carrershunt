@@ -348,6 +348,10 @@ function Companies({ companies, refresh, go }) {
   const input = useRef();
   const [busy, setBusy] = useState(false); const [message,setMessage]=useState("");
   const [runId, setRunId] = useState(null); const [runStatus, setRunStatus] = useState(null);
+  const activeTaskForCompany = (companyId) => runStatus?.tasks?.some(task => task.company_id === companyId && ["queued", "running"].includes(task.status));
+  const runTotal = Object.values(runStatus?.task_counts || {}).reduce((sum, count) => sum + count, 0);
+  const runDone = ["completed", "completed_with_warnings", "failed", "skipped"].reduce((sum, state) => sum + (runStatus?.task_counts?.[state] || 0), 0);
+  const runPercent = runTotal ? Math.round(runDone / runTotal * 100) : 0;
   useEffect(() => {
     let active = true;
     api("/companies/import-runs/latest").then(status => {
@@ -385,27 +389,27 @@ function Companies({ companies, refresh, go }) {
       const body=new FormData(); body.append("file",file);
       const r=await api("/companies/import",{method:"POST",body});
       setRunId(r.ingestion_run_id || null);
-      setRunStatus(null);
+      setRunStatus({run_id:r.ingestion_run_id,status:r.status || "queued",jobs_ingested:0,task_counts:{queued:r.queued_companies||0,running:0,completed:0,completed_with_warnings:0,failed:0,skipped:0},tasks:(r.companies||[]).map(company=>({company_id:company.id,company:company.name,status:"queued",error:null}))});
       setMessage(`Imported ${r.imported} companies. Queued ${r.queued_companies || 0} companies for background scraping.`);
       await refresh();
     } catch(e){setMessage(e.message)} finally{setBusy(false)}
   };
   const ingest = async (id) => {
     setBusy(true); setMessage("");
-    try { const r=await api(`/jobs/ingest/company/${id}`,{method:"POST"}); setRunId(r.ingestion_run_id || null); setRunStatus(null); setMessage(`Queued ${r.queued_companies || 1} company for background crawling.`); }
+    try { const r=await api(`/jobs/ingest/company/${id}`,{method:"POST"}); setRunId(r.ingestion_run_id || null); setRunStatus({run_id:r.ingestion_run_id,status:"queued",jobs_ingested:0,task_counts:{queued:1,running:0,completed:0,completed_with_warnings:0,failed:0,skipped:0},tasks:[{company_id:id,status:"queued",error:null}]}); setMessage(`Queued company for background crawling.`); }
     catch(e){setMessage(e.message)} finally{setBusy(false)}
   };
   return <div className="page">
     <div className="page-head"><div><div className="eyebrow">SOURCE MANAGEMENT</div><h1>Companies</h1><p>Your Excel is the input layer. Carrershunt turns those sources into normalized jobs.</p></div>
-      <label className="primary upload-btn">Upload Excel<input ref={input} type="file" accept=".xlsx,.xls" onChange={upload} hidden />{busy && <span>…</span>}</label>
+      <label className={`primary upload-btn ${busy?"is-loading":""}`}>{busy ? "Uploading…" : "Upload Excel"}<input ref={input} type="file" accept=".xlsx,.xls" onChange={upload} disabled={busy} hidden /></label>
     </div>
     <div className="import-strip"><div className="file-icon">XLS</div><div><strong>Expected columns</strong><span>Company · Careers URL · ATS (optional) · Active (optional)</span></div><div className="import-arrow">Excel → Companies → Jobs</div></div>
     {message && <div className="notice">{message}</div>}
-    {runStatus && <section className="panel"><div className="panel-head"><div><h2>Ingestion run #{runStatus.run_id}</h2><span>Status: {runStatus.status} · {runStatus.jobs_ingested} jobs discovered</span></div><button className="ghost" onClick={()=>go("jobs")}>Open Jobs</button></div><div className="chips"><Badge>Queued {runStatus.task_counts?.queued ?? 0}</Badge><Badge>Running {runStatus.task_counts?.running ?? 0}</Badge><Badge tone="success">Completed {runStatus.task_counts?.completed ?? 0}</Badge><Badge tone="warning">Warnings {runStatus.task_counts?.completed_with_warnings ?? 0}</Badge><Badge tone="warning">Failed {runStatus.task_counts?.failed ?? 0}</Badge></div>{(runStatus.tasks||[]).filter(t=>t.error).map(t=><p key={t.id} className={t.status==="failed"?"notice-error":"muted"}>{t.company || `Job #${t.job_id}`} · {t.error}</p>)}</section>}
+    {runStatus && <section className="panel"><div className="panel-head"><div><h2>Ingestion run #{runStatus.run_id}</h2><span>Status: {runStatus.status} · {runStatus.jobs_ingested} jobs discovered</span></div><button className="ghost" onClick={()=>go("jobs")}>Open Jobs</button></div><div className="progress-track" aria-label={`Ingestion progress ${runPercent}%`}><span style={{width:`${runPercent}%`}}/></div><div className="progress-caption">{runPercent}% complete</div><div className="chips"><Badge>Queued {runStatus.task_counts?.queued ?? 0}</Badge><Badge>Running {runStatus.task_counts?.running ?? 0}</Badge><Badge tone="success">Completed {runStatus.task_counts?.completed ?? 0}</Badge><Badge tone="warning">Warnings {runStatus.task_counts?.completed_with_warnings ?? 0}</Badge><Badge tone="warning">Failed {runStatus.task_counts?.failed ?? 0}</Badge></div>{(runStatus.tasks||[]).filter(t=>t.error).map(t=><p key={t.id} className={t.status==="failed"?"notice-error":"muted"}>{t.company || `Job #${t.job_id}`} · {t.error}</p>)}</section>}
     <section className="panel">
       <div className="panel-head"><div><h2>Tracked sources</h2><span>{companies.length} companies configured</span></div></div>
       {companies.length ? <div className="table-wrap"><table><thead><tr><th>COMPANY</th><th>CAREERS URL</th><th>PLATFORM</th><th>STATUS</th><th></th></tr></thead><tbody>
-        {companies.map(c=><tr key={c.id}><td><strong>{c.name}</strong></td><td><a className="link" href={c.careers_url} target="_blank" rel="noreferrer">{c.careers_url}</a></td><td><Badge>{c.platform || "auto"}</Badge></td><td><Badge tone={c.active ? "success":"neutral"}>{c.active ? "Active":"Inactive"}</Badge></td><td><button className="table-action" disabled={busy} onClick={()=>ingest(c.id)}>Ingest jobs</button></td></tr>)}
+        {companies.map(c=><tr key={c.id}><td><strong>{c.name}</strong></td><td><a className="link" href={c.careers_url} target="_blank" rel="noreferrer">{c.careers_url}</a></td><td><Badge>{c.platform || "auto"}</Badge></td><td><Badge tone={c.active ? "success":"neutral"}>{c.active ? "Active":"Inactive"}</Badge></td><td><button className="table-action" disabled={busy || activeTaskForCompany(c.id)} onClick={()=>ingest(c.id)}>{activeTaskForCompany(c.id) ? <><span className="spinner" aria-hidden="true"/> Crawling…</> : "Ingest jobs"}</button></td></tr>)}
       </tbody></table></div> : <Empty title="Upload your company Excel" text="No companies are configured yet." />}
     </section>
   </div>;
