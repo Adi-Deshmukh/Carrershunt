@@ -3,6 +3,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.db.models import CandidateEvidence, CandidateProfile
 from app.db.session import get_db
 from app.schemas.evidence import EvidenceSearchRequest
@@ -12,7 +13,10 @@ router = APIRouter(prefix="/candidates", tags=["candidate-evidence"])
 
 
 @router.get("/{candidate_id}/evidence")
-def list_evidence(candidate_id: int, db: Session = Depends(get_db)):
+def list_evidence(candidate_id: int, db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
+    candidate = db.get(CandidateProfile, candidate_id)
+    if not candidate or candidate.supabase_user_id != user.get("id"):
+        raise HTTPException(status_code=404, detail="Candidate not found")
     records = db.query(CandidateEvidence).filter(
         CandidateEvidence.candidate_id == candidate_id
     ).order_by(CandidateEvidence.id.desc()).all()
@@ -35,8 +39,10 @@ def search_evidence(
     candidate_id: int,
     data: EvidenceSearchRequest,
     db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
-    if not db.get(CandidateProfile, candidate_id):
+    candidate = db.get(CandidateProfile, candidate_id)
+    if not candidate or candidate.supabase_user_id != user.get("id"):
         raise HTTPException(status_code=404, detail="Candidate not found")
     results = retrieve_evidence(
         db,
