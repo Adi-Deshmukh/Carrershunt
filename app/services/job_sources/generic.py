@@ -89,7 +89,7 @@ def _json_job_postings(soup: BeautifulSoup) -> list[dict]:
             graph = item.get("@graph")
             if isinstance(graph, list):
                 items.extend(graph)
-            for key in ("itemListElement", "mainEntity"):
+            for key in ("itemListElement", "mainEntity", "item"):
                 nested = item.get(key)
                 if isinstance(nested, dict):
                     items.append(nested)
@@ -220,8 +220,9 @@ class GenericSource(JobSource):
 
     async def _fetch_ats_links(self, soup: BeautifulSoup) -> list[JobRecord]:
         candidates: list[tuple[str, str]] = []
-        for link in soup.select("a[href]"):
-            href = _absolute_http_url(link.get("href"), "https://placeholder.invalid/")
+        for link in soup.select("a[href], iframe[src], form[action]"):
+            raw_href = link.get("href") or link.get("src") or link.get("action")
+            href = _absolute_http_url(raw_href, "https://placeholder.invalid/")
             if not href:
                 continue
             platform = _ats_platform(href)
@@ -279,7 +280,7 @@ class GenericSource(JobSource):
             for item in _json_job_postings(soup):
                 record = _posting_to_record(item, index_url, allow_base_fallback=False)
                 # Never turn the company careers index itself into a fake job link.
-                if record and record.job_url.rstrip("/") != index_url.rstrip("/"):
+                if record and len(record.description) >= 100 and record.job_url.rstrip("/") != index_url.rstrip("/"):
                     jobs[record.job_url] = record
 
             candidates: list[tuple[str, str]] = []
@@ -339,7 +340,7 @@ class GenericSource(JobSource):
                     postings = _json_job_postings(detail_soup)
                     if postings:
                         record = _posting_to_record(postings[0], detail_url, allow_base_fallback=True)
-                        if record:
+                        if record and len(record.description) >= 100:
                             return record
 
                     canonical = _canonical_url(detail_soup, detail_url)
@@ -380,7 +381,7 @@ class GenericSource(JobSource):
 
             # Browser fallback is deliberately only invoked when static HTML did
             # not yield a usable role. This keeps normal crawls lightweight.
-            if not jobs:
+            if not any(len(record.description or "") >= 100 for record in jobs.values()):
                 rendered_html = await self._render_page(index_url)
                 if rendered_html:
                     rendered_soup = BeautifulSoup(rendered_html, "html.parser")
@@ -390,7 +391,7 @@ class GenericSource(JobSource):
                     else:
                         for item in _json_job_postings(rendered_soup):
                             record = _posting_to_record(item, index_url, allow_base_fallback=False)
-                            if record and record.job_url.rstrip("/") != index_url.rstrip("/"):
+                            if record and len(record.description) >= 100 and record.job_url.rstrip("/") != index_url.rstrip("/"):
                                 jobs[record.job_url] = record
                         rendered_candidates = []
                         for link in rendered_soup.select("a[href]"):
