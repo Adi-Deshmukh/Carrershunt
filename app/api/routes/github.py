@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.db.models import CandidateProfile
 from app.db.session import get_db
 from app.schemas.evidence import GitHubSyncRequest
@@ -14,8 +15,10 @@ async def github_sync(
     candidate_id: int,
     data: GitHubSyncRequest,
     db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
-    if not db.get(CandidateProfile, candidate_id):
+    candidate = db.get(CandidateProfile, candidate_id)
+    if not candidate or candidate.supabase_user_id != user.get("id"):
         raise HTTPException(status_code=404, detail="Candidate not found")
 
     try:
