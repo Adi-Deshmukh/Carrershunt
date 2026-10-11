@@ -227,7 +227,16 @@ class GenericSource(JobSource):
                 continue
             platform = _ats_platform(href)
             if platform:
-                candidates.append((platform, href))
+                parsed = urlparse(href)
+                parts = [part for part in parsed.path.split("/") if part]
+                board = parts[0] if parts else (parsed.hostname or "").split(".")[0]
+                board_hosts = {
+                    "greenhouse": "boards.greenhouse.io",
+                    "lever": "jobs.lever.co",
+                    "ashby": "jobs.ashbyhq.com",
+                }
+                board_url = f"https://{board_hosts[platform]}/{board}" if board else href
+                candidates.append((platform, board_url))
         # Call the official/public ATS board adapter instead of treating its URL as a
         # generic HTML page. Deduplicate by platform + board URL.
         seen: set[tuple[str, str]] = set()
