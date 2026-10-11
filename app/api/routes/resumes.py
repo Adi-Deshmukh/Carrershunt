@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
-from app.db.models import CandidateProfile, Job, PipelineRun, ResumeVersion
+from app.db.models import CandidateEvidence, CandidateProfile, Job, PipelineRun, ResumeVersion
 from app.db.session import get_db
 from app.schemas.agent import ResumePlan
 from app.services.resume_quality import validate_resume_quality
@@ -58,11 +58,33 @@ def tailor_resume(job_id: int, db: Session = Depends(get_db), user: dict = Depen
         raise HTTPException(status_code=409, detail="No resume plan is available for this job. Re-run job analysis.")
 
     plan = ResumePlan.model_validate(raw_plan)
-    validation_errors = validate_resume_quality(
-        plan,
-        f"{candidate.resume_text or ''} {candidate.experience_years:g}",
-        job.title,
+
+    # Resume plans may use facts from the candidate's indexed GitHub/project
+    # evidence, not only the text extracted from the master resume. Include that
+    # evidence in the numeric-claim source corpus to avoid rejecting grounded
+    # metrics (for example, project scale) as unsupported.
+    evidence_records = db.scalars(
+        select(CandidateEvidence).where(CandidateEvidence.candidate_id == candidate.id)
+    ).all()
+    evidence_text = " ".join(
+        part
+        for record in evidence_records
+        for part in (record.title or "", record.content or "")
+        if part
     )
+    stored_evidence = candidate.evidence_json or ""
+    validation_source = " ".join(
+        part
+        for part in (
+            candidate.resume_text or "",
+            f"{candidate.experience_years:g}",
+            candidate.education or "",
+            stored_evidence,
+            evidence_text,
+        )
+        if part
+    )
+    validation_errors = validate_resume_quality(plan, validation_source, job.title)
     if validation_errors:
         raise HTTPException(
             status_code=422,
