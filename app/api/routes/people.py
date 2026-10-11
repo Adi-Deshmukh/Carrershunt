@@ -3,7 +3,8 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.db.models import Job, Person
+from app.core.auth import get_current_user
+from app.db.models import CandidateProfile, Job, Person
 from app.db.session import get_db
 from app.services.ai_service import AIService
 from app.services.people_search import SerperPeopleProvider
@@ -49,11 +50,21 @@ async def save_people(job_id: int, company: str, role: str, skills: str = "", db
 
 
 @router.post("/outreach/{job_id}")
-def create_outreach(job_id: int, person_id: int | None = None, db: Session = Depends(get_db)):
-    from app.db.models import CandidateProfile, OutreachMessage
+def create_outreach(
+    job_id: int,
+    person_id: int | None = None,
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    from app.db.models import OutreachMessage
 
     job = db.get(Job, job_id)
-    candidate = db.query(CandidateProfile).order_by(CandidateProfile.id.desc()).first()
+    candidate_query = db.query(CandidateProfile)
+    if user.get("id"):
+        candidate_query = candidate_query.filter(CandidateProfile.supabase_user_id == user["id"])
+    else:
+        candidate_query = candidate_query.filter(CandidateProfile.supabase_user_id.is_(None))
+    candidate = candidate_query.order_by(CandidateProfile.id.desc()).first()
     person = db.get(Person, person_id) if person_id else None
 
     if not job or not candidate:
