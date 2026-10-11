@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.db.models import CandidateProfile, Company, IngestionRun, IngestionTask
 from app.db.session import get_db
 from app.schemas.company import CompanyCreate
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/companies", tags=["companies"])
 async def import_company_excel(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ) -> dict:
     """Persist companies and enqueue scraping; never scrape inside the upload request."""
     filename = file.filename or ""
@@ -35,7 +37,7 @@ async def import_company_excel(
         db.refresh(company)
         stored.append(company)
 
-    run = IngestionRun(total_companies=len(stored), status="queued" if stored else "completed")
+    run = IngestionRun(total_companies=len(stored), status="queued" if stored else "completed", supabase_user_id=user.get("id"))
     db.add(run)
     db.flush()
     for company in stored:
@@ -50,9 +52,12 @@ async def import_company_excel(
     db.commit()
     db.refresh(run)
 
-    candidate_exists = db.scalar(
-        select(CandidateProfile.id).order_by(CandidateProfile.id.desc()).limit(1)
-    ) is not None
+    candidate_query = select(CandidateProfile.id)
+    if user.get("id"):
+        candidate_query = candidate_query.where(CandidateProfile.supabase_user_id == user["id"])
+    else:
+        candidate_query = candidate_query.where(CandidateProfile.supabase_user_id.is_(None))
+    candidate_exists = db.scalar(candidate_query.order_by(CandidateProfile.id.desc()).limit(1)) is not None
     return {
         "imported": len(stored),
         "duplicates": len(result.duplicates),
@@ -79,17 +84,22 @@ async def import_company_excel(
 
 
 @router.get("/import-runs/latest")
-def get_latest_import_run(db: Session = Depends(get_db)) -> dict:
-    run = db.scalar(select(IngestionRun).order_by(IngestionRun.id.desc()))
+def get_latest_import_run(db: Session = Depends(get_db), user: dict = Depends(get_current_user)) -> dict:
+    query = select(IngestionRun)
+    if user.get("id"):
+        query = query.where(IngestionRun.supabase_user_id == user["id"])
+    else:
+        query = query.where(IngestionRun.supabase_user_id.is_(None))
+    run = db.scalar(query.order_by(IngestionRun.id.desc()))
     if run is None:
         raise HTTPException(status_code=404, detail="No ingestion runs found")
-    return get_import_run(run.id, db)
+    return get_import_run(run.id, db, user)
 
 
 @router.get("/import-runs/{run_id}")
-def get_import_run(run_id: int, db: Session = Depends(get_db)) -> dict:
+def get_import_run(run_id: int, db: Session = Depends(get_db), user: dict = Depends(get_current_user)) -> dict:
     run = db.get(IngestionRun, run_id)
-    if run is None:
+    if run is None or run.supabase_user_id != user.get("id"):
         raise HTTPException(status_code=404, detail="Ingestion run not found")
     tasks = db.scalars(
         select(IngestionTask).where(IngestionTask.run_id == run_id).order_by(IngestionTask.id)
