@@ -20,6 +20,13 @@ def ensure_schema_compatibility(engine: Engine) -> None:
                 "CREATE INDEX IF NOT EXISTS ix_candidate_profiles_supabase_user_id "
                 "ON candidate_profiles (supabase_user_id)"
             ))
+    if "jobs" in tables and "companies" in tables:
+        with engine.begin() as connection:
+            connection.execute(text(
+                "UPDATE jobs SET status = 'stale' WHERE "
+                "length(trim(coalesce(description, ''))) < 100 OR "
+                "job_url = (SELECT careers_url FROM companies WHERE companies.id = jobs.company_id)"
+            ))
     if "resume_versions" in tables:
         columns = {column["name"] for column in inspector.get_columns("resume_versions")}
         if "candidate_id" not in columns:
