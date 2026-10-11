@@ -163,19 +163,38 @@ function Jobs({ jobs, companies, candidate, refresh }) {
 function Companies({ companies, refresh, go }) {
   const input = useRef();
   const [busy, setBusy] = useState(false); const [message,setMessage]=useState("");
+  const [runId, setRunId] = useState(null); const [runStatus, setRunStatus] = useState(null);
+  useEffect(() => {
+    if (!runId) return;
+    let active = true; let timer;
+    const poll = async () => {
+      try {
+        const status = await api(`/companies/import-runs/${runId}`);
+        if (!active) return;
+        setRunStatus(status);
+        if (["completed", "completed_with_errors"].includes(status.status)) {
+          setMessage(`Ingestion ${status.status}: ${status.jobs_ingested} jobs discovered. Open Jobs to review results.`);
+          await refresh();
+          return;
+        }
+      } catch (e) {
+        if (active) setMessage(`Could not refresh ingestion status: ${e.message}`);
+      }
+      if (active) timer = setTimeout(poll, 1500);
+    };
+    poll();
+    return () => { active = false; if (timer) clearTimeout(timer); };
+  }, [runId]);
   const upload = async () => {
     const file=input.current?.files?.[0]; if(!file) return;
     setBusy(true); setMessage("");
     try {
       const body=new FormData(); body.append("file",file);
       const r=await api("/companies/import",{method:"POST",body});
-      const p = r.pipeline || {};
-      const pipelineText = p.requires_candidate
-        ? "Create/upload your candidate resume to run matching."
-        : `${p.processed} jobs processed, ${p.failed} pipeline failures.`;
-      setMessage(`Imported ${r.imported} companies, ingested ${r.jobs_ingested || 0} jobs. ${pipelineText}`);
+      setRunId(r.ingestion_run_id || null);
+      setRunStatus(null);
+      setMessage(`Imported ${r.imported} companies. Queued ${r.queued_companies || 0} companies for background scraping.`);
       await refresh();
-      go("jobs");
     } catch(e){setMessage(e.message)} finally{setBusy(false)}
   };
   const ingest = async (id) => {
@@ -189,6 +208,7 @@ function Companies({ companies, refresh, go }) {
     </div>
     <div className="import-strip"><div className="file-icon">XLS</div><div><strong>Expected columns</strong><span>Company · Careers URL · ATS (optional) · Active (optional)</span></div><div className="import-arrow">Excel → Companies → Jobs</div></div>
     {message && <div className="notice">{message}</div>}
+    {runStatus && <section className="panel"><div className="panel-head"><div><h2>Ingestion run #{runStatus.run_id}</h2><span>Status: {runStatus.status} · {runStatus.jobs_ingested} jobs discovered</span></div><button className="ghost" onClick={()=>go("jobs")}>Open Jobs</button></div><div className="chips"><Badge>Queued {runStatus.task_counts?.queued ?? 0}</Badge><Badge>Running {runStatus.task_counts?.running ?? 0}</Badge><Badge tone="success">Completed {runStatus.task_counts?.completed ?? 0}</Badge><Badge tone="warning">Failed {runStatus.task_counts?.failed ?? 0}</Badge></div>{(runStatus.tasks||[]).filter(t=>t.status==="failed").map(t=><p key={t.id} className="muted">{t.company || `Job #${t.job_id}`} · {t.error}</p>)}</section>}
     <section className="panel">
       <div className="panel-head"><div><h2>Tracked sources</h2><span>{companies.length} companies configured</span></div></div>
       {companies.length ? <div className="table-wrap"><table><thead><tr><th>COMPANY</th><th>CAREERS URL</th><th>PLATFORM</th><th>STATUS</th><th></th></tr></thead><tbody>
