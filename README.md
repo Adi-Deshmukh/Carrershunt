@@ -60,9 +60,10 @@ See [the Supabase and live crawler verification checklist](docs/SUPABASE_AND_CRA
 2. Copy `.env.example` to `.env`.
 3. Add `GITHUB_TOKEN` for higher GitHub API rate limits (optional for public repositories), AI provider keys for LLM-assisted analysis, and `SERPER_API_KEY` for public-profile discovery.
 4. For local JS-rendered careers crawling, install Chromium: `playwright install chromium`.
-5. Run FastAPI: `uvicorn app.main:app --reload`.
-6. In a second terminal, run the durable crawler workers: `python -m app.workers.ingestion_worker --workers 4`. Keep them running while ingestion tasks are expected to execute.
-7. In a third terminal, run the frontend: `cd frontend && npm ci && npm run dev`.
+5. Run FastAPI: `uvicorn app.main:app --reload`. By default, the API automatically starts four ingestion worker loops, so no separate worker terminal is needed for local development.
+6. In a second terminal, run the frontend: `cd frontend && npm ci && npm run dev`.
+
+Set `INGESTION_WORKERS=4` to change the local worker count. Set `ENABLE_INGESTION_WORKER=false` when running the API alongside a dedicated worker service. Docker Compose uses a separate `worker` service and disables the API's in-process workers to avoid duplicate workers. The standalone command `python -m app.workers.ingestion_worker --workers 4` remains supported for dedicated deployments.
 
 The default database is SQLite for local development. Use PostgreSQL or another persistent SQLAlchemy-supported database for production.
 
