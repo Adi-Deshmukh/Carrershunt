@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Populate local Supabase environment variables without overwriting other settings.
 
-Run from any directory:
+Run from the repository root:
     python scripts/configure_supabase_env.py
 
 The Supabase publishable key is intended for browser use. Never use a service-role
@@ -26,7 +26,7 @@ def update_env(path: Path, template_path: Path, values: dict[str, str]) -> None:
         lines = []
 
     for key, value in values.items():
-        pattern = re.compile(rf"^\\s*{re.escape(key)}\\s*=.*$")
+        pattern = re.compile(rf"^\s*{re.escape(key)}\s*=.*$")
         matching = [i for i, line in enumerate(lines) if pattern.match(line)]
         replacement = f"{key}={value}"
         if matching:
@@ -39,7 +39,7 @@ def update_env(path: Path, template_path: Path, values: dict[str, str]) -> None:
             lines.append(replacement)
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\\n".join(lines).rstrip() + "\\n", encoding="utf-8")
+    path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
 def main() -> None:
