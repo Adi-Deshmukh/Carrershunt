@@ -123,6 +123,7 @@ def reset_account_workspace(
             # Remove any remaining legacy artifacts for jobs that were proven unshared.
             db.execute(delete(PipelineRun).where(PipelineRun.job_id.in_(safe_job_ids)))
             db.execute(delete(ResumeVersion).where(ResumeVersion.job_id.in_(safe_job_ids)))
+            db.execute(delete(IngestionTask).where(IngestionTask.job_id.in_(safe_job_ids)))
             deleted_jobs = len(safe_job_ids)
             db.execute(delete(Job).where(Job.id.in_(safe_job_ids)))
         # Remove any legacy anonymous task references before deleting companies.
