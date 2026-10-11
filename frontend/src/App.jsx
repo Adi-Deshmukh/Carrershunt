@@ -254,6 +254,19 @@ async function api(path, options = {}) {
   return data;
 }
 
+function getOriginalPostingUrl(job) {
+  for (const candidate of [job?.job_url, job?.apply_url]) {
+    if (!candidate) continue;
+    try {
+      const url = new URL(candidate);
+      if (url.protocol === "https:" || url.protocol === "http:") return url.href;
+    } catch {
+      // Never render an invalid or relative source as an external posting link.
+    }
+  }
+  return null;
+}
+
 function Metric({ label, value, hint, tone = "" }) {
   return <div className="metric-card">
     <div className="metric-label">{label}</div>
@@ -315,7 +328,7 @@ function Overview({ stats, jobs, companies, candidate, go }) {
   </div>;
 }
 
-function Jobs({ jobs, companies, candidate, refresh }) {
+function Jobs({ jobs, companies, candidate, refresh, jobId, navigate }) {
   const [running, setRunning] = useState({});
   const [selected, setSelected] = useState(null);
   const [result, setResult] = useState(null);
@@ -351,10 +364,13 @@ function Jobs({ jobs, companies, candidate, refresh }) {
   };
 
   useEffect(() => {
-    if (!selected && jobs.length) {
+    if (jobId) {
+      const target = jobs.find(job => job.id === Number(jobId));
+      if (target && selected?.id !== target.id) openResult(target);
+    } else if (!selected && jobs.length) {
       openResult(jobs[0]);
     }
-  }, [jobs]);
+  }, [jobId, jobs]);
   
   const run = async (job, useLlm = false) => {
     if (isAnalyzing || !candidate) return;
@@ -376,28 +392,44 @@ function Jobs({ jobs, companies, candidate, refresh }) {
   };
 
   return <div className="page">
-    <div className="page-head"><div><div className="eyebrow">JOB INTELLIGENCE</div><h1>Jobs</h1><p>Review eligibility, evidence, gaps, score breakdown, and the tailored resume before applying.</p></div></div>
+    {jobId ? <div className="page-head job-detail-heading">
+      <div>
+        <button className="ghost back-to-jobs" onClick={() => navigate("jobs")}>← Back to jobs</button>
+        <div className="eyebrow">ROLE DETAILS · JOB #{jobId}</div>
+        <h1>{selected?.title || "Loading role…"}</h1>
+        <p>{selected ? `${companies.find(c => c.id === selected.company_id)?.name || "Company"} · ${selected.location || "Location not specified"}` : "Loading the selected job description…"}</p>
+      </div>
+      {getOriginalPostingUrl(selected) && <a className="ghost external-role-link" href={getOriginalPostingUrl(selected)} target="_blank" rel="noopener noreferrer">Original posting ↗</a>}
+    </div> : <div className="page-head"><div><div className="eyebrow">JOB INTELLIGENCE</div><h1>Jobs</h1><p>Review eligibility, evidence, gaps, score breakdown, and the tailored resume before applying.</p></div></div>}
     {message && <div className={message.startsWith("Analysis failed:") ? "notice notice-error" : "notice"} role="status" aria-live="polite">{message}</div>}
     {isAnalyzing && <div className="processing-panel"><span className="spinner" aria-hidden="true" /><div><strong>Analyzing role against your profile</strong><span>Reading requirements, comparing evidence, and preparing the resume plan. Keep this page open.</span></div></div>}
     {!canAnalyze && <div className="warning-box">Create your candidate profile and upload a real master resume before running analysis. The placeholder profile text is not sufficient for matching.</div>}
-    <section className="panel">
-      <div className="panel-head"><div><h2>{jobs.length} roles in pipeline</h2><span>Click a role to inspect its latest analysis.</span></div></div>
+    {!jobId && <section className="panel">
+      <div className="panel-head"><div><h2>{jobs.length} roles in pipeline</h2><span>Open a role to read its full description before analyzing it.</span></div></div>
       {jobs.length ? <div className="job-grid">{jobs.map(j => {
         const company = companies.find(c => c.id === j.company_id);
-        return <article className={selected?.id === j.id ? "job-card selected" : "job-card"} key={j.id} onClick={() => {if(!isBusy) openResult(j)}}>
+        return <article className={selected?.id === j.id ? "job-card selected" : "job-card"} key={j.id} onClick={() => {if(!isBusy) navigate("jobs", j.id)}}>
           <div className="job-top"><Badge>{j.source || "source"}</Badge><span className="job-id">#{j.id}</span></div>
           <h3>{j.title}</h3><p>{company?.name || "Unknown company"} · {j.location || "Location not specified"}</p>
-          <div className="job-meta"><span>{j.employment_type || "Role"}</span>{j.job_url ? <a href={j.job_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>View role ↗</a> : <span>Posting URL unavailable</span>}{j.apply_url && j.apply_url !== j.job_url && <a href={j.apply_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>Apply ↗</a>}</div>
-          <button className="primary full analyze-button" disabled={!canAnalyze || isBusy || !j.description || j.description.trim().length < 100 || !j.job_url} title={!canAnalyze ? "Upload a real master resume first" : (!j.description || j.description.trim().length < 100) ? "This posting has no usable description; re-ingest the company" : ""} onClick={e => {e.stopPropagation();run(j, false)}}>{running[j.id] ? <><span className="spinner" aria-hidden="true" /> Analyzing role…</> : isBusy ? "Processing…" : (!j.description || j.description.trim().length < 100) ? "Job details unavailable" : !canAnalyze ? "Upload master resume first" : "Analyze role"}</button>
+          <div className="job-meta"><span>{j.employment_type || "Role"}</span><a href={`/jobs/${j.id}`} onClick={e=>{e.preventDefault();e.stopPropagation();navigate("jobs",j.id)}}>View role →</a>{getOriginalPostingUrl(j) ? <a href={getOriginalPostingUrl(j)} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}>Original posting ↗</a> : <span className="muted" title="The crawler did not return a valid job URL">Original posting unavailable</span>}</div>
+          <button className="primary full analyze-button" disabled={isBusy} onClick={e => {e.stopPropagation();navigate("jobs", j.id)}}>View & analyze role</button>
         </article>
       })}</div> : <Empty title="No jobs imported" text="Go to Companies, upload your Excel, then ingest the sources." />}
-    </section>
+    </section>}
 
-    {selected && <section className="panel result-panel">
-      <div className="panel-head"><div><div className="eyebrow">MATCH RESULT</div><h2>{selected.title}</h2><span>{companies.find(c=>c.id===selected.company_id)?.name || "Company"} · {selected.location || "Location unspecified"}</span></div>
-        {result?.resume_download_url ? <a className="primary download-link" href={`${API_BASE}${result.resume_download_url}`}>Download tailored DOCX ↓</a> : result?.resume && <button className="primary" disabled={creatingResume} onClick={createResume}>{creatingResume ? "Creating DOCX…" : "Create tailored resume"}</button>}
+    {jobId && !selected && (jobs.some(job => job.id === Number(jobId)) ? <section className="panel"><Empty title="Loading role…" text="Fetching this role from your imported jobs." /></section> : <section className="panel"><Empty title="Role not found" text="This job ID is not in the current jobs list. Return to Jobs and open a role from your imported data." /><button className="ghost" onClick={() => navigate("jobs")}>Back to jobs</button></section>)}
+    {jobId && selected && (!selected.description || selected.description.trim().length < 100) && <section className="panel"><div className="warning-box">This posting has no usable description yet. Re-ingest the company source before analysis.</div></section>}
+
+    {selected && (!jobId || selected.id === Number(jobId)) && <section className="panel result-panel">
+      <div className="panel-head"><div><div className="eyebrow">{result ? "MATCH RESULT" : "JOB DESCRIPTION"}</div><h2>{selected.title}</h2><span>{companies.find(c=>c.id===selected.company_id)?.name || "Company"} · {selected.location || "Location unspecified"} · Job #{selected.id}</span></div>
+        <div className="job-detail-actions">
+          {getOriginalPostingUrl(selected) && <a className="ghost" href={getOriginalPostingUrl(selected)} target="_blank" rel="noopener noreferrer">Original posting ↗</a>}
+          {selected.apply_url && getOriginalPostingUrl(selected) && selected.apply_url !== getOriginalPostingUrl(selected) && <a className="ghost" href={selected.apply_url} target="_blank" rel="noopener noreferrer">Apply ↗</a>}
+          {result?.resume_download_url ? <a className="primary download-link" href={`${API_BASE}${result.resume_download_url}`}>Download tailored DOCX ↓</a> : result?.resume && <button className="primary" disabled={creatingResume} onClick={createResume}>{creatingResume ? "Creating DOCX…" : "Create tailored resume"}</button>}
+          {!result && <button className="primary" disabled={!canAnalyze || isBusy || !selected.description || selected.description.trim().length < 100} title={!canAnalyze ? "Upload a real master resume first" : ""} onClick={() => run(selected, false)}>{running[selected.id] ? <><span className="spinner" aria-hidden="true" /> Analyzing…</> : !canAnalyze ? "Upload master resume first" : "Analyze role"}</button>}
+        </div>
       </div>
-      <details className="job-description"><summary>Review full job description</summary><div className="job-description-content">{selected.description || "No job description was captured for this posting."}</div></details>
+      <div className="job-description job-description-page"><div className="job-description-heading">FULL JOB DESCRIPTION</div><div className="job-description-content full-description">{selected.description || "No job description was captured for this posting."}</div></div>
       {result ? <div className="result-grid">
         <div className="score-card"><span>FIT SCORE</span><strong>{Math.round(result.match?.fit_score ?? 0)}</strong><small>{result.match?.eligible ? "Eligible" : "Hard eligibility failure"}</small></div>
         <div className="score-card"><span>INTERVIEW ESTIMATE</span><strong className="small-score">{result.match?.interview_estimate || "—"}</strong><small>Confidence: {result.match?.confidence || "—"}</small></div>
@@ -417,6 +449,7 @@ function Jobs({ jobs, companies, candidate, refresh }) {
 function Companies({ companies, refresh, go }) {
   const input = useRef();
   const [busy, setBusy] = useState(false); const [message,setMessage]=useState("");
+  const [resetting, setResetting] = useState(false);
   const [runId, setRunId] = useState(null); const [runStatus, setRunStatus] = useState(null);
   const activeTaskForCompany = (companyId) => runStatus?.tasks?.some(task => task.company_id === companyId && ["queued", "running"].includes(task.status));
   const runTotal = Object.values(runStatus?.task_counts || {}).reduce((sum, count) => sum + count, 0);
@@ -462,7 +495,40 @@ function Companies({ companies, refresh, go }) {
       setRunStatus({run_id:r.ingestion_run_id,status:r.status || "queued",jobs_ingested:0,task_counts:{queued:r.queued_companies||0,running:0,completed:0,completed_with_warnings:0,failed:0,skipped:0},tasks:(r.companies||[]).map(company=>({company_id:company.id,company:company.name,status:"queued",error:null}))});
       setMessage(`Imported ${r.imported} companies. Queued ${r.queued_companies || 0} companies for background scraping.`);
       await refresh();
-    } catch(e){setMessage(e.message)} finally{setBusy(false)}
+    } catch(e){setMessage(e.message)} finally{setBusy(false); if(input.current) input.current.value = ""}
+  };
+
+  const resetWorkspace = async () => {
+    if (resetting || busy) return;
+    const confirmed = window.confirm("Reset your Carrershunt workspace? This removes your candidate profile, analysis/resume artifacts, ingestion history, and company/job data that is not shared with another account. Your login stays active. You will need to upload your Excel and master resume again.");
+    if (!confirmed) return;
+    setResetting(true); setMessage("");
+    try {
+      const result = await api("/account/reset", { method: "POST" });
+      const session = await getValidSession();
+      if (session) {
+        await syncSupabaseProfile(session, {
+          name: session.user?.user_metadata?.full_name || "",
+          email: session.user?.email || "",
+          education: "",
+          graduation_year: null,
+          experience_years: 0,
+          location: "",
+          work_authorization: "",
+          resume_text: "",
+          evidence: {},
+        });
+      }
+      setRunId(null);
+      setRunStatus(null);
+      await refresh();
+      setMessage(`Workspace reset complete. Removed ${result.companies_removed} companies and ${result.jobs_removed} jobs; preserved ${result.shared_company_data_preserved} company records shared with other accounts. Upload your Excel and master resume again.`);
+    } catch (e) {
+      setMessage(`Reset did not fully complete: ${e.message}`);
+      try { await refresh(); } catch {}
+    } finally {
+      setResetting(false);
+    }
   };
   const ingest = async (id) => {
     setBusy(true); setMessage("");
@@ -471,7 +537,10 @@ function Companies({ companies, refresh, go }) {
   };
   return <div className="page">
     <div className="page-head"><div><div className="eyebrow">SOURCE MANAGEMENT</div><h1>Companies</h1><p>Your Excel is the input layer. Carrershunt turns those sources into normalized jobs.</p></div>
-      <label className={`primary upload-btn ${busy?"is-loading":""}`}>{busy ? "Uploading…" : "Upload Excel"}<input ref={input} type="file" accept=".xlsx,.xls" onChange={upload} disabled={busy} hidden /></label>
+      <div style={{display:"flex",gap:"0.65rem",alignItems:"center",flexWrap:"wrap"}}>
+        <button className="ghost" type="button" onClick={resetWorkspace} disabled={busy || resetting}>{resetting ? "Resetting…" : "Reset my workspace"}</button>
+        <label className={`primary upload-btn ${busy?"is-loading":""}`}>{busy ? "Uploading…" : "Upload Excel"}<input ref={input} type="file" accept=".xlsx,.xls" onChange={upload} disabled={busy || resetting} hidden /></label>
+      </div>
     </div>
     <div className="import-strip"><div className="file-icon">XLS</div><div><strong>Expected columns</strong><span>Company · Careers URL · ATS (optional) · Active (optional)</span></div><div className="import-arrow">Excel → Companies → Jobs</div></div>
     {message && <div className="notice">{message}</div>}
@@ -686,8 +755,25 @@ function ConfigurationRequiredScreen() {
   </div>;
 }
 
+function readRouteFromLocation() {
+  const path = window.location.pathname.replace(/\/$/, "") || "/";
+  const jobMatch = path.match(/^\/jobs\/(\d+)$/);
+  if (jobMatch) return { page: "jobs", jobId: Number(jobMatch[1]) };
+  const pageMatch = path.match(/^\/(overview|jobs|companies|candidate|people|applications|settings)$/);
+  return { page: pageMatch?.[1] || "overview", jobId: null };
+}
+
 export default function App() {
-  const [page,setPage]=useState("overview"); const [data,setData]=useState({jobs:[],companies:[],applications:[],candidate:null}); const [loading,setLoading]=useState(true);
+  const [route,setRoute]=useState(readRouteFromLocation);
+  const page=route.page;
+  const navigate=(target, id=null)=>{
+    const nextRoute={page:target,jobId:target==="jobs" && id ? Number(id) : null};
+    const path=nextRoute.jobId ? `/jobs/${nextRoute.jobId}` : target==="overview" ? "/" : `/${target}`;
+    if(window.location.pathname!==path) window.history.pushState({}, "", path);
+    setRoute(nextRoute);
+  };
+  const setPage=(target)=>navigate(target);
+  const [data,setData]=useState({jobs:[],companies:[],applications:[],candidate:null}); const [loading,setLoading]=useState(true);
   const [authSession,setAuthSession]=useState(()=>SUPABASE_CONFIGURED ? null : readStoredSession());
   const [apiHealth,setApiHealth]=useState("checking");
   useEffect(()=>{
@@ -709,6 +795,11 @@ export default function App() {
     getValidSession().then(session=>{if(active)setAuthSession(session)}).catch(()=>{if(active)setAuthSession(null)});
     return ()=>{active=false};
   },[]);
+  useEffect(()=>{
+    const onPopState=()=>setRoute(readRouteFromLocation());
+    window.addEventListener("popstate",onPopState);
+    return ()=>window.removeEventListener("popstate",onPopState);
+  },[]);
   const refresh=async()=>{setLoading(true);try{const [jobs,companies,applications,candidate]=await Promise.all([api("/jobs"),api("/companies"),api("/applications"),api("/candidates/latest")]);setData({jobs,companies,applications,candidate})}catch(e){console.error(e)}finally{setLoading(false)}};
   useEffect(()=>{if(SUPABASE_CONFIGURED && authSession)refresh()},[authSession?.user?.id]);
   const stats=useMemo(()=>({jobs:data.jobs.length,companies:data.companies.length,applications:data.applications.length,matched:data.jobs.filter(j=>j.job_url && j.description && j.description.length>=100).length}),[data]);
@@ -722,7 +813,7 @@ export default function App() {
     </aside>
     <main><header className="topbar"><div className="crumb">CARRERSHUNT <span>/</span> {nav.find(x=>x[0]===page)?.[1].toUpperCase()}</div><div className="topbar-actions"><button className="refresh" onClick={refresh}>↻ Refresh</button>{SUPABASE_CONFIGURED && <button className="signout" onClick={async()=>{const session=await getValidSession();try{await signOutSupabase(session)}finally{setAuthSession(null);setData({jobs:[],companies:[],applications:[],candidate:null});setPage("overview")}}}>Sign out</button>}</div></header>
       {page==="overview"&&<Overview stats={stats} jobs={data.jobs} companies={data.companies} candidate={data.candidate} go={setPage}/>}
-      {page==="jobs"&&<Jobs jobs={data.jobs} companies={data.companies} candidate={data.candidate} refresh={refresh}/>}
+      {page==="jobs"&&<Jobs jobs={data.jobs} companies={data.companies} candidate={data.candidate} refresh={refresh} jobId={route.jobId} navigate={navigate} />}
       {page==="companies"&&<Companies companies={data.companies} refresh={refresh} go={setPage}/>}
       {page==="candidate"&&<Candidate candidate={data.candidate} refresh={refresh}/>}
       {page==="people"&&<People jobs={data.jobs}/>}

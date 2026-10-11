@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import os
 import socket
 from datetime import datetime
@@ -28,6 +29,7 @@ from app.services.job_service import ingest_company_jobs
 
 MAX_ATTEMPTS = 3
 POLL_SECONDS = 1.0
+logger = logging.getLogger(__name__)
 TERMINAL_STATES = {"completed", "completed_with_warnings", "failed", "skipped"}
 
 
@@ -112,6 +114,20 @@ async def process_task(task_id: int, worker_id: str) -> None:
             db.commit()
             refresh_run_status(db, run_id)
             db.commit()
+        except asyncio.CancelledError:
+            # The API is shutting down; release the claimed task so a new worker
+            # can safely pick it up instead of leaving it stuck in "running".
+            db.rollback()
+            task = db.get(IngestionTask, task_id)
+            if task is not None and task.status == "running":
+                task.status = "queued"
+                task.worker_id = None
+                task.started_at = None
+                task.updated_at = datetime.utcnow()
+                db.commit()
+                refresh_run_status(db, run_id)
+                db.commit()
+            raise
         except Exception as exc:
             db.rollback()
             task = db.get(IngestionTask, task_id)
@@ -131,11 +147,17 @@ async def process_task(task_id: int, worker_id: str) -> None:
 
 async def worker_loop(worker_id: str) -> None:
     while True:
-        task_id = claim_task(worker_id)
-        if task_id is None:
+        try:
+            task_id = claim_task(worker_id)
+            if task_id is None:
+                await asyncio.sleep(POLL_SECONDS)
+                continue
+            await process_task(task_id, worker_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Ingestion worker %s encountered an unexpected error", worker_id)
             await asyncio.sleep(POLL_SECONDS)
-            continue
-        await process_task(task_id, worker_id)
 
 
 async def main(workers: int) -> None:

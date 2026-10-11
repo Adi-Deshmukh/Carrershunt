@@ -5,6 +5,8 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/carrershunt
+      # Compose runs a dedicated worker service; avoid duplicate in-process workers.
+      ENABLE_INGESTION_WORKER: "false"
       REDIS_URL: redis://redis:6379/0
       AI_PROVIDER: ${AI_PROVIDER:-auto}
       AI_PRIMARY_PROVIDER: ${AI_PRIMARY_PROVIDER:-gemini}
