@@ -64,6 +64,52 @@ def _detail_candidate(site: str, url: str) -> bool:
 class CompanyCareersSource(JobSource):
     name = "company_careers"
 
+    async def _render_index(self, url: str, site: str) -> str | None:
+        """Render the index and submit empty/default search forms where required."""
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            return None
+        try:
+            async with async_playwright() as playwright:
+                browser = await playwright.chromium.launch(headless=True)
+                try:
+                    page = await browser.new_page(
+                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36 Carrershunt/0.3"
+                    )
+                    await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=7000)
+                    except Exception:
+                        pass
+                    if site == "microsoft":
+                        # The old jobs.careers.microsoft.com/search URL can render a
+                        # search form without results until Find jobs is submitted.
+                        try:
+                            button = page.get_by_role("button", name=re.compile(r"find jobs", re.I))
+                            if await button.count():
+                                await button.first.click(timeout=5000)
+                                await page.wait_for_timeout(2500)
+                        except Exception:
+                            pass
+                    elif site == "google" and "/applications/jobs" in url and "/results/" not in url:
+                        try:
+                            button = page.get_by_role("button", name=re.compile(r"search jobs|search", re.I))
+                            if await button.count():
+                                await button.first.click(timeout=5000)
+                                await page.wait_for_timeout(2000)
+                        except Exception:
+                            pass
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=5000)
+                    except Exception:
+                        pass
+                    return await page.content()
+                finally:
+                    await browser.close()
+        except Exception:
+            return None
+
     async def fetch_jobs(self, careers_url: str) -> list[JobRecord]:
         site = _site(careers_url)
         if not site:
@@ -80,7 +126,7 @@ class CompanyCareersSource(JobSource):
                 record.source = site
             return records
 
-        html = await generic._render_page(careers_url)
+        html = await self._render_index(careers_url, site)
         if not html:
             raise RuntimeError(
                 "Could not render this careers page. Install Playwright Chromium "
