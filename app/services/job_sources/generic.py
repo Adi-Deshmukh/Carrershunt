@@ -258,6 +258,8 @@ class GenericSource(JobSource):
             return None
         soup = BeautifulSoup(html, "html.parser")
         rendered_url = _canonical_url(soup, url)
+        if not _looks_like_job(title_hint, rendered_url):
+            return None
         postings = _json_job_postings(soup)
         if postings:
             record = _posting_to_record(postings[0], rendered_url, allow_base_fallback=True)
@@ -428,6 +430,8 @@ class GenericSource(JobSource):
                         return None
                     h1 = detail_soup.select_one("h1")
                     real_title = _clean(h1.get_text(" ", strip=True)) if h1 else title
+                    if not _looks_like_job(real_title, canonical):
+                        return None
                     description = _page_description(detail_soup)
                     if not real_title or len(description) < 180:
                         return None
