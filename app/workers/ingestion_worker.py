@@ -18,7 +18,6 @@ from sqlalchemy import select, update
 
 from app.db.models import (
     Base,
-    CandidateProfile,
     Company,
     IngestionRun,
     IngestionTask,
@@ -26,7 +25,6 @@ from app.db.models import (
 )
 from app.db.session import SessionLocal, engine
 from app.services.job_service import ingest_company_jobs
-from app.services.pipeline_service import run_pipeline
 
 MAX_ATTEMPTS = 3
 POLL_SECONDS = 1.0
@@ -99,42 +97,6 @@ async def process_task(task_id: int, worker_id: str) -> None:
                 jobs = await ingest_company_jobs(db, company)
                 task.jobs_ingested = len(jobs)
 
-                # Matching is a separate queue task, never part of the upload request.
-                candidate = db.scalar(
-                    select(CandidateProfile).order_by(CandidateProfile.id.desc())
-                )
-                if candidate:
-                    for job in jobs:
-                        already_queued = db.scalar(
-                            select(IngestionTask.id).where(
-                                IngestionTask.run_id == run_id,
-                                IngestionTask.task_type == "pipeline_job",
-                                IngestionTask.job_id == job.id,
-                            )
-                        )
-                        if already_queued is None:
-                            db.add(
-                                IngestionTask(
-                                    run_id=run_id,
-                                    task_type="pipeline_job",
-                                    job_id=job.id,
-                                    status="queued",
-                                )
-                            )
-            elif task.task_type == "pipeline_job":
-                job = db.get(Job, task.job_id) if task.job_id else None
-                candidate = db.scalar(
-                    select(CandidateProfile).order_by(CandidateProfile.id.desc())
-                )
-                if job is None or candidate is None:
-                    task.status = "skipped"
-                    task.error = "Job or candidate profile unavailable"
-                    task.finished_at = datetime.utcnow()
-                    db.commit()
-                    refresh_run_status(db, run_id)
-                    db.commit()
-                    return
-                run_pipeline(db, candidate, job, use_llm=False)
             else:
                 raise ValueError(f"Unsupported ingestion task type: {task.task_type}")
 
@@ -173,6 +135,8 @@ async def worker_loop(worker_id: str) -> None:
 
 async def main(workers: int) -> None:
     Base.metadata.create_all(bind=engine)
+    from app.db.migrations import ensure_schema_compatibility
+    ensure_schema_compatibility(engine)
     tasks = []
     for index in range(workers):
         worker_id = f"{socket.gethostname()}-{os.getpid()}-{index}-{uuid4().hex[:6]}"
