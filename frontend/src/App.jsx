@@ -86,6 +86,18 @@ function Jobs({ jobs, companies, candidate, refresh }) {
   const [selected, setSelected] = useState(null);
   const [result, setResult] = useState(null);
   const [message, setMessage] = useState("");
+  const [creatingResume, setCreatingResume] = useState(false);
+
+  const createResume = async () => {
+    if (!selected || !result?.resume) return;
+    setCreatingResume(true); setMessage("");
+    try {
+      const r = await api(`/resumes/tailor/${selected.id}`, { method: "POST" });
+      setResult(current => ({ ...current, resume_generated: true, resume_id: r.resume_id, resume_download_url: r.download_url }));
+      setMessage("Tailored DOCX created and passed quality checks.");
+    } catch (e) { setMessage(e.message); }
+    finally { setCreatingResume(false); }
+  };
 
   const openResult = async (job) => {
     setSelected(job); setMessage("");
@@ -122,19 +134,20 @@ function Jobs({ jobs, companies, candidate, refresh }) {
           <div className="job-top"><Badge>{j.source || "source"}</Badge><span className="job-id">#{j.id}</span></div>
           <h3>{j.title}</h3><p>{company?.name || "Unknown company"} · {j.location || "Location not specified"}</p>
           <div className="job-meta"><span>{j.employment_type || "Role"}</span><a href={j.job_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>View posting ↗</a></div>
-          <button className="primary full" disabled={!candidate || running[j.id]} onClick={e => {e.stopPropagation();run(j.id, false)}}>{running[j.id] ? "Processing…" : "Analyze + tailor resume →"}</button>
+          <button className="primary full" disabled={!candidate || running[j.id]} onClick={e => {e.stopPropagation();run(j.id, false)}}>{running[j.id] ? "Analyzing…" : "Analyze job →"}</button>
         </article>
       })}</div> : <Empty title="No jobs imported" text="Go to Companies, upload your Excel, then ingest the sources." />}
     </section>
 
     {selected && <section className="panel result-panel">
       <div className="panel-head"><div><div className="eyebrow">MATCH RESULT</div><h2>{selected.title}</h2><span>{companies.find(c=>c.id===selected.company_id)?.name || "Company"} · {selected.location || "Location unspecified"}</span></div>
-        {result?.resume_download_url && <a className="primary download-link" href={`${API_BASE}${result.resume_download_url}`}>Download tailored DOCX ↓</a>}
+        {result?.resume_download_url ? <a className="primary download-link" href={`${API_BASE}${result.resume_download_url}`}>Download tailored DOCX ↓</a> : result?.resume && <button className="primary" disabled={creatingResume} onClick={createResume}>{creatingResume ? "Creating DOCX…" : "Create tailored resume"}</button>}
       </div>
+      <details className="job-description"><summary>Review full job description</summary><div className="job-description-content">{selected.description || "No job description was captured for this posting."}</div></details>
       {result ? <div className="result-grid">
         <div className="score-card"><span>FIT SCORE</span><strong>{Math.round(result.match?.fit_score ?? 0)}</strong><small>{result.match?.eligible ? "Eligible" : "Hard eligibility failure"}</small></div>
         <div className="score-card"><span>INTERVIEW ESTIMATE</span><strong className="small-score">{result.match?.interview_estimate || "—"}</strong><small>Confidence: {result.match?.confidence || "—"}</small></div>
-        <div className="score-card"><span>RESUME</span><strong className="small-score">{result.resume_generated ? "Ready" : "Blocked"}</strong><small>{result.validation_errors?.length ? result.validation_errors.length + " validation issues" : "Validated"}</small></div>
+        <div className="score-card"><span>RESUME</span><strong className="small-score">{result.resume_generated ? "Ready" : result.resume ? "Not created" : "Unavailable"}</strong><small>{result.resume_generated ? "DOCX generated" : result.resume ? "Create after reviewing the JD" : "Run job analysis first"}</small></div>
       </div> : <Empty title="No analysis yet" text="Run the pipeline to generate the match and tailored resume."/>}
       {result && <div className="result-details">
         <div><h3>Why this matches</h3><p>{result.match?.explanation || "No explanation available."}</p></div>
