@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
@@ -23,6 +24,24 @@ from app.db.models import (
 from app.db.session import get_db
 
 router = APIRouter(prefix="/account", tags=["account"])
+
+
+def _remove_generated_resume_files(candidate_ids: list[int], job_ids: list[int]) -> None:
+    root = Path("generated_resumes").resolve()
+    paths = set()
+    for candidate_id in candidate_ids:
+        paths.add(root / "masters" / f"candidate_{candidate_id}_master.docx")
+        paths.update(root.glob(f"candidate_{candidate_id}_job_*.docx"))
+    for job_id in job_ids:
+        paths.update(root.glob(f"candidate_*_job_{job_id}*.docx"))
+    for path in paths:
+        try:
+            resolved = path.resolve()
+            if root in resolved.parents and resolved.is_file():
+                resolved.unlink()
+        except OSError:
+            # A missing/unavailable artifact must not roll back the DB reset.
+            pass
 
 
 @router.post("/reset")
@@ -113,6 +132,7 @@ def reset_account_workspace(
     db.execute(delete(CandidateProfile).where(CandidateProfile.id.in_(candidate_ids))) if candidate_ids else None
 
     deleted_jobs = 0
+    safe_job_ids: list[int] = []
     if safe_company_ids:
         safe_job_ids = list(db.scalars(select(Job.id).where(Job.company_id.in_(safe_company_ids))))
         if safe_job_ids:
@@ -132,6 +152,7 @@ def reset_account_workspace(
         db.execute(delete(Company).where(Company.id.in_(safe_company_ids)))
 
     db.commit()
+    _remove_generated_resume_files(candidate_ids, safe_job_ids)
     return {
         "status": "reset",
         "candidate_profiles_removed": len(candidate_ids),
