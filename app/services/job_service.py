@@ -41,6 +41,10 @@ async def ingest_company_jobs(db: Session, company: Company) -> list[Job]:
             record.apply_url = record.job_url
         valid_records.append(record)
 
+    detected_sources = {record.source for record in valid_records}
+    if len(detected_sources) == 1 and next(iter(detected_sources)) in {"greenhouse", "lever", "ashby"}:
+        company.platform = next(iter(detected_sources))
+
     stored: list[Job] = []
     for record in valid_records:
         existing = db.scalar(select(Job).where(Job.job_url == record.job_url))
