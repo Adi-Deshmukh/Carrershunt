@@ -308,7 +308,7 @@ function Jobs({ jobs, companies, candidate, refresh }) {
     <div className="page-head"><div><div className="eyebrow">JOB INTELLIGENCE</div><h1>Jobs</h1><p>Review eligibility, evidence, gaps, score breakdown, and the tailored resume before applying.</p></div></div>
     {message && <div className={message.startsWith("Analysis failed:") ? "notice notice-error" : "notice"} role="status" aria-live="polite">{message}</div>}
     {isAnalyzing && <div className="processing-panel"><span className="spinner" aria-hidden="true" /><div><strong>Analyzing role against your profile</strong><span>Reading requirements, comparing evidence, and preparing the resume plan. Keep this page open.</span></div></div>}
-    {!candidate && <div className="warning-box">Create your candidate profile and upload your master resume before running analysis.</div>}
+    {!canAnalyze && <div className="warning-box">Create your candidate profile and upload a real master resume before running analysis. The placeholder profile text is not sufficient for matching.</div>}
     <section className="panel">
       <div className="panel-head"><div><h2>{jobs.length} roles in pipeline</h2><span>Click a role to inspect its latest analysis.</span></div></div>
       {jobs.length ? <div className="job-grid">{jobs.map(j => {
