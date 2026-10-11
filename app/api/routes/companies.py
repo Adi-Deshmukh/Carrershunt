@@ -78,6 +78,14 @@ async def import_company_excel(
     }
 
 
+@router.get("/import-runs/latest")
+def get_latest_import_run(db: Session = Depends(get_db)) -> dict:
+    run = db.scalar(select(IngestionRun).order_by(IngestionRun.id.desc()))
+    if run is None:
+        raise HTTPException(status_code=404, detail="No ingestion runs found")
+    return get_import_run(run.id, db)
+
+
 @router.get("/import-runs/{run_id}")
 def get_import_run(run_id: int, db: Session = Depends(get_db)) -> dict:
     run = db.get(IngestionRun, run_id)
