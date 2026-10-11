@@ -257,6 +257,7 @@ function Jobs({ jobs, companies, candidate, refresh }) {
   const [message, setMessage] = useState("");
   const [creatingResume, setCreatingResume] = useState(false);
   const isAnalyzing = Object.values(running).some(Boolean);
+  const canAnalyze = Boolean(candidate?.resume_text && candidate.resume_text !== "Master resume pending" && candidate.resume_text.trim().length >= 100);
 
   const createResume = async () => {
     if (!selected || !result?.resume) return;
@@ -315,8 +316,8 @@ function Jobs({ jobs, companies, candidate, refresh }) {
         return <article className="job-card" key={j.id} onClick={() => openResult(j)}>
           <div className="job-top"><Badge>{j.source || "source"}</Badge><span className="job-id">#{j.id}</span></div>
           <h3>{j.title}</h3><p>{company?.name || "Unknown company"} · {j.location || "Location not specified"}</p>
-          <div className="job-meta"><span>{j.employment_type || "Role"}</span>{j.apply_url || j.job_url ? <a href={j.apply_url || j.job_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>Open actual posting ↗</a> : <span>Posting URL unavailable</span>}</div>
-          <button className="primary full analyze-button" disabled={!candidate || isAnalyzing} onClick={e => {e.stopPropagation();run(j, false)}}>{running[j.id] ? <><span className="spinner" aria-hidden="true" /> Analyzing role…</> : isAnalyzing ? "Waiting for analysis…" : "Analyze role"}</button>
+          <div className="job-meta"><span>{j.employment_type || "Role"}</span>{j.job_url ? <a href={j.job_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>View role ↗</a> : <span>Posting URL unavailable</span>}{j.apply_url && j.apply_url !== j.job_url && <a href={j.apply_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>Apply ↗</a>}</div>
+          <button className="primary full analyze-button" disabled={!canAnalyze || isAnalyzing || !j.description || j.description.trim().length < 100 || !j.job_url} title={!canAnalyze ? "Upload a real master resume first" : (!j.description || j.description.trim().length < 100) ? "This posting has no usable description; re-ingest the company" : ""} onClick={e => {e.stopPropagation();run(j, false)}}>{running[j.id] ? <><span className="spinner" aria-hidden="true" /> Analyzing role…</> : isAnalyzing ? "Waiting for analysis…" : (!j.description || j.description.trim().length < 100) ? "Job details unavailable" : !canAnalyze ? "Upload master resume first" : "Analyze role"}</button>
         </article>
       })}</div> : <Empty title="No jobs imported" text="Go to Companies, upload your Excel, then ingest the sources." />}
     </section>
