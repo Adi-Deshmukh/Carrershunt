@@ -54,12 +54,13 @@ def import_companies(file_bytes: bytes) -> ImportResult:
     }
     resolved_columns = {}
     for required, aliases in COLUMN_ALIASES.items():
-        match = next(
-            (normalized_columns[alias] for alias in aliases if alias in normalized_columns),
-            None,
-        )
-        if match is not None:
-            resolved_columns[required] = match
+        matches = [
+            column
+            for normalized, column in normalized_columns.items()
+            if normalized in aliases
+        ]
+        if matches:
+            resolved_columns[required] = matches
     missing = REQUIRED_COLUMNS - set(resolved_columns)
     if missing:
         raise ValueError(
@@ -74,10 +75,16 @@ def import_companies(file_bytes: bytes) -> ImportResult:
     seen: set[tuple[str, str]] = set()
 
     for row_number, row in enumerate(df.to_dict(orient="records"), start=2):
-        raw_name = row[resolved_columns["company"]]
-        raw_url = row[resolved_columns["careers_url"]]
+        raw_name = next(
+            (row[column] for column in resolved_columns["company"] if not pd.isna(row[column])),
+            None,
+        )
+        raw_url = next(
+            (row[column] for column in resolved_columns["careers_url"] if not pd.isna(row[column])),
+            None,
+        )
 
-        if pd.isna(raw_name) or pd.isna(raw_url):
+        if raw_name is None or raw_url is None:
             invalid.append(
                 {"row": str(row_number), "reason": "company and careers_url are required"}
             )
