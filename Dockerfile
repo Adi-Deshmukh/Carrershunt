@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1     PYTHONUNBUFFERED=1     PIP_NO_CACHE_DIR=1
+ENV PYTHONDONTWRITEBYTECODE=1     PYTHONUNBUFFERED=1     PIP_NO_CACHE_DIR=1     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ COPY docs ./docs
 
 RUN pip install --upgrade pip && pip install . && playwright install --with-deps chromium
 
-RUN useradd --create-home --uid 10001 appuser &&     mkdir -p /app/generated_resumes &&     chown -R appuser:appuser /app
+RUN useradd --create-home --uid 10001 appuser &&     mkdir -p /app/generated_resumes /ms-playwright &&     chown -R appuser:appuser /app /ms-playwright
 
 USER appuser
 
