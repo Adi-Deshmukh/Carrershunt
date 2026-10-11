@@ -20,6 +20,13 @@ def test_manual_ingest_endpoint_only_queues_work():
     with test_session() as db:
         company = Company(name="Example", careers_url="https://example.com/careers")
         db.add(company)
+        db.flush()
+        # The signed-in workspace can crawl only companies attached to one of
+        # its ingestion runs. Seed an earlier import for the local dev identity.
+        run = IngestionRun(total_companies=1, status="completed", supabase_user_id=None)
+        db.add(run)
+        db.flush()
+        db.add(IngestionTask(run_id=run.id, task_type="scrape_company", company_id=company.id, status="completed"))
         db.commit()
         company_id = company.id
 
