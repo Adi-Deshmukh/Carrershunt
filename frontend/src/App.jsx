@@ -95,6 +95,7 @@ function Jobs({ jobs, companies, candidate, refresh }) {
   const [result, setResult] = useState(null);
   const [message, setMessage] = useState("");
   const [creatingResume, setCreatingResume] = useState(false);
+  const isAnalyzing = Object.values(running).some(Boolean);
 
   const createResume = async () => {
     if (!selected || !result?.resume) return;
@@ -108,10 +109,11 @@ function Jobs({ jobs, companies, candidate, refresh }) {
   };
 
   const openResult = async (job) => {
-    setSelected(job); setMessage("");
+    setSelected(job); setResult(null); setMessage("");
     try {
       const r = await api(`/pipeline/jobs/${job.id}/latest`);
       setResult(r.result);
+      if (r.status === "failed") setMessage(r.error || "The last analysis failed. Run analysis again.");
     } catch { setResult(null); }
   };
 
@@ -121,19 +123,30 @@ function Jobs({ jobs, companies, candidate, refresh }) {
     }
   }, [jobs]);
   
-  const run = async (jobId, useLlm = false) => {
-    setRunning(r => ({...r, [jobId]: true})); setMessage("");
+  const run = async (job, useLlm = false) => {
+    if (isAnalyzing || !candidate) return;
+    setSelected(job);
+    setResult(null);
+    setRunning({[job.id]: true});
+    setMessage("Analyzing the actual job description against your candidate profile…");
     try {
-      const r = await api(`/pipeline/${jobId}?use_llm=${useLlm}`, {method:"POST"});
-      setResult(r); setSelected(jobs.find(j => j.id === jobId)); setMessage(`Pipeline completed: ${r.status}.`);
+      const r = await api(`/pipeline/${job.id}?use_llm=${useLlm}`, {method:"POST"});
+      if (!r?.match || !r?.resume) throw new Error("Analysis returned an incomplete result. Check the backend logs and retry.");
+      setResult(r);
+      setMessage(`Analysis complete for ${job.title}.`);
       await refresh();
-    } catch(e) { setMessage(e.message); } finally { setRunning(r => ({...r, [jobId]: false})); }
+    } catch(e) {
+      setMessage(`Analysis failed: ${e.message}. Check that the job description and candidate resume are available, then retry.`);
+    } finally {
+      setRunning({});
+    }
   };
 
   return <div className="page">
     <div className="page-head"><div><div className="eyebrow">JOB INTELLIGENCE</div><h1>Jobs</h1><p>Review eligibility, evidence, gaps, score breakdown, and the tailored resume before applying.</p></div></div>
-    {message && <div className="notice">{message}</div>}
-    {!candidate && <div className="warning-box">Create your candidate profile before running the pipeline.</div>}
+    {message && <div className={message.startsWith("Analysis failed:") ? "notice notice-error" : "notice"} role="status" aria-live="polite">{message}</div>}
+    {isAnalyzing && <div className="processing-panel"><span className="spinner" aria-hidden="true" /><div><strong>Analyzing role against your profile</strong><span>Reading requirements, comparing evidence, and preparing the resume plan. Keep this page open.</span></div></div>}
+    {!candidate && <div className="warning-box">Create your candidate profile and upload your master resume before running analysis.</div>}
     <section className="panel">
       <div className="panel-head"><div><h2>{jobs.length} roles in pipeline</h2><span>Click a role to inspect its latest analysis.</span></div></div>
       {jobs.length ? <div className="job-grid">{jobs.map(j => {
@@ -141,8 +154,8 @@ function Jobs({ jobs, companies, candidate, refresh }) {
         return <article className="job-card" key={j.id} onClick={() => openResult(j)}>
           <div className="job-top"><Badge>{j.source || "source"}</Badge><span className="job-id">#{j.id}</span></div>
           <h3>{j.title}</h3><p>{company?.name || "Unknown company"} · {j.location || "Location not specified"}</p>
-          <div className="job-meta"><span>{j.employment_type || "Role"}</span><a href={j.job_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>View posting ↗</a></div>
-          <button className="primary full" disabled={!candidate || running[j.id]} onClick={e => {e.stopPropagation();run(j.id, false)}}>{running[j.id] ? "Analyzing…" : "Analyze job →"}</button>
+          <div className="job-meta"><span>{j.employment_type || "Role"}</span>{j.apply_url || j.job_url ? <a href={j.apply_url || j.job_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>Open actual posting ↗</a> : <span>Posting URL unavailable</span>}</div>
+          <button className="primary full analyze-button" disabled={!candidate || isAnalyzing} onClick={e => {e.stopPropagation();run(j, false)}}>{running[j.id] ? <><span className="spinner" aria-hidden="true" /> Analyzing role…</> : isAnalyzing ? "Waiting for analysis…" : "Analyze role"}</button>
         </article>
       })}</div> : <Empty title="No jobs imported" text="Go to Companies, upload your Excel, then ingest the sources." />}
     </section>
