@@ -65,6 +65,7 @@ class CandidateProfile(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
     email: Mapped[str | None] = mapped_column(String(320))
+    supabase_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     education: Mapped[str | None] = mapped_column(Text)
     graduation_year: Mapped[int | None] = mapped_column(Integer)
     experience_years: Mapped[float] = mapped_column(Float, default=0)
@@ -123,6 +124,7 @@ class ResumeVersion(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"))
+    candidate_id: Mapped[int | None] = mapped_column(ForeignKey("candidate_profiles.id"), nullable=True, index=True)
     filename: Mapped[str] = mapped_column(String(500))
     content_json: Mapped[str] = mapped_column(Text)
     file_path: Mapped[str | None] = mapped_column(String(1000))
