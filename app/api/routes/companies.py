@@ -12,6 +12,19 @@ from app.services.company_store import upsert_company
 router = APIRouter(prefix="/companies", tags=["companies"])
 
 
+def _user_company_query(db: Session, user: dict):
+    query = (
+        select(Company)
+        .join(IngestionTask, IngestionTask.company_id == Company.id)
+        .join(IngestionRun, IngestionTask.run_id == IngestionRun.id)
+    )
+    if user.get("id"):
+        query = query.where(IngestionRun.supabase_user_id == user["id"])
+    else:
+        query = query.where(IngestionRun.supabase_user_id.is_(None))
+    return query.distinct()
+
+
 @router.post("/import", status_code=202)
 async def import_company_excel(
     file: UploadFile = File(...),
@@ -41,14 +54,7 @@ async def import_company_excel(
     db.add(run)
     db.flush()
     for company in stored:
-        db.add(
-            IngestionTask(
-                run_id=run.id,
-                task_type="scrape_company",
-                company_id=company.id,
-                status="queued",
-            )
-        )
+        db.add(IngestionTask(run_id=run.id, task_type="scrape_company", company_id=company.id, status="queued"))
     db.commit()
     db.refresh(run)
 
@@ -130,24 +136,30 @@ def get_import_run(run_id: int, db: Session = Depends(get_db), user: dict = Depe
         "updated_at": run.updated_at,
     }
 
+
 @router.get("")
-def list_companies(db: Session = Depends(get_db)):
-    companies = db.scalars(select(Company).order_by(Company.name)).all()
+def list_companies(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
+    companies = db.scalars(_user_company_query(db, user).order_by(Company.name)).all()
     return [
         {
-            "id": c.id,
-            "name": c.name,
-            "careers_url": c.careers_url,
-            "platform": c.platform,
-            "active": c.active,
+            "id": company.id,
+            "name": company.name,
+            "careers_url": company.careers_url,
+            "platform": company.platform,
+            "active": company.active,
         }
-        for c in companies
+        for company in companies
     ]
 
 
 @router.post("")
-def create_company(data: CompanyCreate, db: Session = Depends(get_db)):
+def create_company(data: CompanyCreate, db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     company = upsert_company(db, data)
+    db.flush()
+    run = IngestionRun(total_companies=1, status="queued", supabase_user_id=user.get("id"))
+    db.add(run)
+    db.flush()
+    db.add(IngestionTask(run_id=run.id, task_type="scrape_company", company_id=company.id, status="queued"))
     db.commit()
     db.refresh(company)
     return {
