@@ -5,25 +5,57 @@ from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import CandidateProfile, Job, ResumeVersion
+from app.db.models import CandidateProfile, Job, PipelineRun, ResumeVersion
 from app.db.session import get_db
-from app.services.resume_service import generate_docx
+from app.schemas.agent import ResumePlan
+from app.services.resume_quality import validate_resume_quality
+from app.services.resume_service import generate_docx_from_plan
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 
 
 @router.post("/tailor/{job_id}")
 def tailor_resume(job_id: int, db: Session = Depends(get_db)):
+    """Create a DOCX only after the user explicitly requests it for a reviewed job."""
     job = db.get(Job, job_id)
     candidate = db.scalar(select(CandidateProfile).order_by(CandidateProfile.id.desc()))
     if not job or not candidate:
         raise HTTPException(status_code=404, detail="Job or candidate profile not found")
 
-    path, content = generate_docx(candidate, job)
+    run = db.scalar(
+        select(PipelineRun)
+        .where(
+            PipelineRun.job_id == job.id,
+            PipelineRun.candidate_id == candidate.id,
+            PipelineRun.status.in_(["completed", "completed_with_warnings"]),
+        )
+        .order_by(PipelineRun.id.desc())
+    )
+    if not run or not run.result_json:
+        raise HTTPException(status_code=409, detail="Analyze this job before creating a tailored resume.")
+
+    result = json.loads(run.result_json)
+    raw_plan = result.get("resume")
+    if not raw_plan:
+        raise HTTPException(status_code=409, detail="No resume plan is available for this job. Re-run job analysis.")
+
+    plan = ResumePlan.model_validate(raw_plan)
+    validation_errors = validate_resume_quality(
+        plan,
+        f"{candidate.resume_text or ''} {candidate.experience_years:g}",
+        job.title,
+    )
+    if validation_errors:
+        raise HTTPException(
+            status_code=422,
+            detail={"message": "Resume plan did not pass quality checks.", "validation_errors": validation_errors},
+        )
+
+    path, content = generate_docx_from_plan(candidate, job, plan)
     version = ResumeVersion(
         job_id=job.id,
         filename=path.name,
-        content_json=json.dumps(content),
+        content_json=json.dumps(content, ensure_ascii=False),
         file_path=str(path),
     )
     db.add(version)
