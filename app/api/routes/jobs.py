@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.db.models import Company, IngestionRun, IngestionTask, Job
 from app.db.session import get_db
 
@@ -9,13 +10,13 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
 @router.post("/ingest/company/{company_id}", status_code=202)
-def ingest_jobs(company_id: int, db: Session = Depends(get_db)):
+def ingest_jobs(company_id: int, db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     """Queue a company crawl; the HTTP request never waits on the remote website."""
     company = db.get(Company, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    run = IngestionRun(total_companies=1, status="queued")
+    run = IngestionRun(total_companies=1, status="queued", supabase_user_id=user.get("id"))
     db.add(run)
     db.flush()
     db.add(IngestionTask(run_id=run.id, task_type="scrape_company", company_id=company.id, status="queued"))
