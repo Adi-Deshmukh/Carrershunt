@@ -22,7 +22,7 @@ def detect_platform(url: str) -> str:
         return "atlassian"
     if host == "google.com" or host.endswith(".google.com"):
         return "google"
-    if host == "careers.microsoft.com":
+    if host == "microsoft.com" or host.endswith(".microsoft.com"):
         return "microsoft"
     return "generic"
 
