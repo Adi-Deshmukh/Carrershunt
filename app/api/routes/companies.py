@@ -1,23 +1,22 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import CandidateProfile, Company
+from app.db.models import CandidateProfile, Company, IngestionRun, IngestionTask
 from app.db.session import get_db
 from app.schemas.company import CompanyCreate
 from app.services.company_import import import_companies
 from app.services.company_store import upsert_company
-from app.services.job_service import ingest_company_jobs
-from app.services.pipeline_service import run_pipeline
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
 
-@router.post("/import")
+@router.post("/import", status_code=202)
 async def import_company_excel(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> dict:
+    """Persist companies and enqueue scraping; never scrape inside the upload request."""
     filename = file.filename or ""
     if not filename.lower().endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Upload an Excel file (.xlsx or .xls).")
@@ -30,74 +29,88 @@ async def import_company_excel(
         raise HTTPException(status_code=400, detail="Could not read the Excel file.") from exc
 
     stored = []
-    ingestion = []
     for company_data in result.imported:
         company = upsert_company(db, company_data)
         db.commit()
         db.refresh(company)
         stored.append(company)
-        try:
-            jobs = await ingest_company_jobs(db, company)
-            ingestion.append({
-                "company_id": company.id,
-                "company": company.name,
-                "platform": company.platform,
-                "jobs_ingested": len(jobs),
-                "status": "completed",
-            })
-        except Exception as exc:
-            # Keep the company even when its source cannot be scraped.
-            db.rollback()
-            ingestion.append({
-                "company_id": company.id,
-                "company": company.name,
-                "platform": company.platform,
-                "jobs_ingested": 0,
-                "status": "failed",
-                "error": str(exc)[:500],
-            })
 
-    candidate = db.scalar(select(CandidateProfile).order_by(CandidateProfile.id.desc()))
-    pipeline_results = []
-    pipeline_errors = []
-    if candidate:
-        jobs = db.scalars(
-            select(__import__("app.db.models", fromlist=["Job"]).Job)
-            .where(__import__("app.db.models", fromlist=["Job"]).Job.company_id.in_([c.id for c in stored]))
-            .order_by(__import__("app.db.models", fromlist=["Job"]).Job.id)
-        ).all()
-        for job in jobs:
-            try:
-                pipeline_results.append(run_pipeline(db, candidate, job, use_llm=False).model_dump())
-            except Exception as exc:
-                pipeline_errors.append({
-                    "job_id": job.id,
-                    "title": job.title,
-                    "error": str(exc)[:1000],
-                })
+    run = IngestionRun(total_companies=len(stored), status="queued" if stored else "completed")
+    db.add(run)
+    db.flush()
+    for company in stored:
+        db.add(
+            IngestionTask(
+                run_id=run.id,
+                task_type="scrape_company",
+                company_id=company.id,
+                status="queued",
+            )
+        )
+    db.commit()
+    db.refresh(run)
 
+    candidate_exists = db.scalar(
+        select(CandidateProfile.id).order_by(CandidateProfile.id.desc()).limit(1)
+    ) is not None
     return {
         "imported": len(stored),
         "duplicates": len(result.duplicates),
         "invalid": len(result.invalid),
         "companies": [
-            {"id": c.id, "name": c.name, "careers_url": c.careers_url, "platform": c.platform}
-            for c in stored
+            {"id": company.id, "name": company.name, "careers_url": company.careers_url, "platform": company.platform}
+            for company in stored
         ],
-        "ingestion": ingestion,
-        "jobs_ingested": sum(item["jobs_ingested"] for item in ingestion),
+        "ingestion_run_id": run.id,
+        "status": run.status,
+        "queued_companies": len(stored),
+        "jobs_ingested": 0,
         "pipeline": {
-            "candidate_id": candidate.id if candidate else None,
-            "processed": len(pipeline_results),
-            "failed": len(pipeline_errors),
-            "results": pipeline_results,
-            "errors": pipeline_errors,
-            "requires_candidate": candidate is None,
+            "candidate_id": None,
+            "processed": 0,
+            "failed": 0,
+            "results": [],
+            "errors": [],
+            "requires_candidate": not candidate_exists,
         },
         "duplicate_names": result.duplicates,
         "invalid_rows": result.invalid,
     }
 
+
+@router.get("/import-runs/{run_id}")
+def get_import_run(run_id: int, db: Session = Depends(get_db)) -> dict:
+    run = db.get(IngestionRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Ingestion run not found")
+    tasks = db.scalars(
+        select(IngestionTask).where(IngestionTask.run_id == run_id).order_by(IngestionTask.id)
+    ).all()
+    counts = {state: sum(task.status == state for task in tasks) for state in ("queued", "running", "completed", "failed", "skipped")}
+    return {
+        "run_id": run.id,
+        "status": run.status,
+        "total_companies": run.total_companies,
+        "task_counts": counts,
+        "jobs_ingested": sum(task.jobs_ingested for task in tasks if task.task_type == "scrape_company"),
+        "tasks": [
+            {
+                "id": task.id,
+                "type": task.task_type,
+                "company_id": task.company_id,
+                "company": task.company.name if task.company else None,
+                "job_id": task.job_id,
+                "status": task.status,
+                "attempts": task.attempts,
+                "jobs_ingested": task.jobs_ingested,
+                "worker_id": task.worker_id,
+                "error": task.error,
+            }
+            for task in tasks
+        ],
+        "created_at": run.created_at,
+        "updated_at": run.updated_at,
+    }
 
 @router.get("")
 def list_companies(db: Session = Depends(get_db)):
