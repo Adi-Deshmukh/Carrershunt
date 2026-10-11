@@ -31,7 +31,7 @@ def ingest_jobs(company_id: int, db: Session = Depends(get_db)):
 
 @router.get("")
 def list_jobs(db: Session = Depends(get_db)):
-    jobs = db.scalars(select(Job).order_by(Job.updated_at.desc())).all()
+    jobs = db.scalars(select(Job).where(Job.status == "open").order_by(Job.updated_at.desc())).all()
     return [
         {
             "id": j.id,
