@@ -18,7 +18,8 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
-grant select, insert, update on public.profiles to authenticated;
+revoke all on table public.profiles from anon, public;
+grant select, insert, update on table public.profiles to authenticated;
 
 drop policy if exists "Users can read their own profile" on public.profiles;
 create policy "Users can read their own profile"
@@ -79,3 +80,7 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.handle_new_user();
+
+-- Trigger functions must not be callable through PostgREST RPC.
+revoke all on function public.handle_new_user() from public, anon, authenticated;
+revoke all on function public.set_profile_updated_at() from public, anon, authenticated;
