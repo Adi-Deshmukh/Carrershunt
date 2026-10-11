@@ -202,4 +202,4 @@ class IngestionTask(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     run: Mapped["IngestionRun"] = relationship(back_populates="tasks")
-    company: Mapped["Company | None"] = relationship()
+    company: Mapped[Company | None] = relationship()
