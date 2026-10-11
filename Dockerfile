@@ -9,7 +9,7 @@ COPY app ./app
 COPY tests ./tests
 COPY docs ./docs
 
-RUN pip install --upgrade pip && pip install .
+RUN pip install --upgrade pip && pip install . && playwright install --with-deps chromium
 
 RUN useradd --create-home --uid 10001 appuser &&     mkdir -p /app/generated_resumes &&     chown -R appuser:appuser /app
 
