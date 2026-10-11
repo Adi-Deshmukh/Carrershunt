@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.db.models import CandidateProfile
 from app.db.session import get_db
 from app.services.evidence import EvidenceInput, upsert_evidence
@@ -15,9 +16,10 @@ async def upload_master_resume(
     candidate_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
     candidate = db.get(CandidateProfile, candidate_id)
-    if not candidate:
+    if not candidate or candidate.supabase_user_id != user.get("id"):
         raise HTTPException(status_code=404, detail="Candidate not found")
 
     content = await file.read()
