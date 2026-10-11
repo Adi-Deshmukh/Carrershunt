@@ -30,6 +30,16 @@ def _clean(value: str | None) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
 
 
+def _same_page(left: str, right: str) -> bool:
+    def identity(value: str) -> tuple[str, str]:
+        parsed = urlparse(value)
+        host = (parsed.hostname or "").lower()
+        if host.startswith("www."):
+            host = host[4:]
+        return host, parsed.path.rstrip("/") or "/"
+    return identity(left) == identity(right)
+
+
 def _absolute_http_url(url: str | None, base_url: str) -> str | None:
     if not url:
         return None
@@ -289,14 +299,14 @@ class GenericSource(JobSource):
             for item in _json_job_postings(soup):
                 record = _posting_to_record(item, index_url, allow_base_fallback=False)
                 # Never turn the company careers index itself into a fake job link.
-                if record and len(record.description) >= 100 and record.job_url.rstrip("/") != index_url.rstrip("/"):
+                if record and len(record.description) >= 100 and not _same_page(record.job_url, index_url):
                     jobs[record.job_url] = record
 
             candidates: list[tuple[str, str]] = []
             for link in soup.select("a[href]"):
                 title = _clean(link.get_text(" ", strip=True))
                 absolute = _absolute_http_url(link.get("href"), index_url)
-                if not absolute or not title or absolute.rstrip("/") == index_url.rstrip("/"):
+                if not absolute or not title or _same_page(absolute, index_url):
                     continue
                 if _looks_like_job(title, absolute):
                     candidates.append((title, absolute))
@@ -355,7 +365,7 @@ class GenericSource(JobSource):
                     canonical = _canonical_url(detail_soup, detail_url)
                     # If the link redirected to the index or canonicalized to the
                     # careers homepage, do not persist it as a distinct job.
-                    if canonical.rstrip("/") == index_url.rstrip("/"):
+                    if _same_page(canonical, index_url):
                         return None
                     h1 = detail_soup.select_one("h1")
                     real_title = _clean(h1.get_text(" ", strip=True)) if h1 else title
@@ -406,7 +416,7 @@ class GenericSource(JobSource):
                         for link in rendered_soup.select("a[href]"):
                             title = _clean(link.get_text(" ", strip=True))
                             absolute = _absolute_http_url(link.get("href"), index_url)
-                            if absolute and title and absolute.rstrip("/") != index_url.rstrip("/") and _looks_like_job(title, absolute):
+                            if absolute and title and not _same_page(absolute, index_url) and _looks_like_job(title, absolute):
                                 rendered_candidates.append((title, absolute))
                         rendered_unique = []
                         rendered_seen = set()
