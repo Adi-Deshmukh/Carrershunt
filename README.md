@@ -41,14 +41,13 @@ This includes LangGraph orchestration, structured job extraction, evidence-groun
 
 ## Supabase Auth setup
 
-Carrershunt includes an Auth-backed `public.profiles` table migration, signup-triggered profile creation, and frontend login/signup support.
+Carrershunt includes an Auth-backed `public.profiles` table migration, session-based login/signup, session refresh/revocation, and candidate-profile initialization.
 
-1. Open the Carrershunt Supabase project and apply [the profile migration](supabase/migrations/202610110001_profiles.sql) (already applied to the current managed project).
-2. Copy `frontend/.env.example` to `frontend/.env` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-3. Set the same project URL/key pair as `SUPABASE_URL` and `SUPABASE_ANON_KEY` in the backend `.env`.
-4. Use the publishable key (legacy anon key also supported); never put a secret/service-role key in any `VITE_*` variable or commit real credentials.
-5. Configure email/password under Supabase Auth, then set the Site URL and allowed redirect URLs for localhost and the actual frontend deployment.
-6. Restart the backend and frontend. Test sign-up, sign-in, sign-out, profile read/write, and account isolation with two accounts.
+1. From the repository root, run `python scripts/configure_supabase_env.py`. It creates/updates the root `.env` and `frontend/.env`, preserves other existing settings, and sets the Carrershunt Supabase project values.
+2. Restart FastAPI and Vite. Login is fail-closed: the dashboard does not open if the frontend Supabase configuration is missing.
+3. Configure email/password under Supabase Auth, then set the Site URL and allowed redirect URLs for localhost and the actual frontend deployment.
+4. Test sign-up, sign-in, sign-out, session refresh, profile read/write, and account isolation with two accounts. On sign-up/sign-in, the app ensures a Supabase profile row and initializes a local candidate record if one does not exist.
+5. Keep generated `.env` files out of Git. The publishable key is intended for browser use; never put a secret/service-role key in any `VITE_*` variable.
 
 See [the Supabase and live crawler verification checklist](docs/SUPABASE_AND_CRAWLER_VERIFICATION.md).
 
