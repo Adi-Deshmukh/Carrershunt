@@ -493,7 +493,16 @@ function Companies({ companies, refresh, go }) {
       const r=await api("/companies/import",{method:"POST",body});
       setRunId(r.ingestion_run_id || null);
       setRunStatus({run_id:r.ingestion_run_id,status:r.status || "queued",jobs_ingested:0,task_counts:{queued:r.queued_companies||0,running:0,completed:0,completed_with_warnings:0,failed:0,skipped:0},tasks:(r.companies||[]).map(company=>({company_id:company.id,company:company.name,status:"queued",error:null}))});
-      setMessage(`Imported ${r.imported} companies. Queued ${r.queued_companies || 0} companies for background scraping.`);
+      const duplicateCount = (r.duplicates || 0);
+      const invalidCount = (r.invalid || 0);
+      setMessage(`Imported ${r.imported} companies; queued ${r.queued_companies || 0} crawls. ${duplicateCount} duplicate row(s), ${invalidCount} invalid row(s) skipped.`);
+      if (duplicateCount || invalidCount) {
+        const details = [
+          ...(r.duplicate_names || []).slice(0, 8).map(name => `Duplicate: ${name}`),
+          ...(r.invalid_rows || []).slice(0, 8).map(row => `Row ${row.row}: ${row.reason}`),
+        ];
+        if (details.length) setMessage(current => `${current} Details: ${details.join(" · ")}`);
+      }
       await refresh();
     } catch(e){setMessage(e.message)} finally{setBusy(false); if(input.current) input.current.value = ""}
   };
@@ -544,7 +553,7 @@ function Companies({ companies, refresh, go }) {
     </div>
     <div className="import-strip"><div className="file-icon">XLS</div><div><strong>Expected columns</strong><span>Company · Careers URL · ATS (optional) · Active (optional)</span></div><div className="import-arrow">Excel → Companies → Jobs</div></div>
     {message && <div className="notice">{message}</div>}
-    {runStatus && <section className="panel"><div className="panel-head"><div><h2>Ingestion run #{runStatus.run_id}</h2><span>Status: {runStatus.status} · {runStatus.jobs_ingested} jobs discovered</span></div><button className="ghost" onClick={()=>go("jobs")}>Open Jobs</button></div><div className="progress-track" aria-label={`Ingestion progress ${runPercent}%`}><span style={{width:`${runPercent}%`}}/></div><div className="progress-caption">{runPercent}% complete</div><div className="chips"><Badge>Queued {runStatus.task_counts?.queued ?? 0}</Badge><Badge>Running {runStatus.task_counts?.running ?? 0}</Badge><Badge tone="success">Completed {runStatus.task_counts?.completed ?? 0}</Badge><Badge tone="warning">Warnings {runStatus.task_counts?.completed_with_warnings ?? 0}</Badge><Badge tone="warning">Failed {runStatus.task_counts?.failed ?? 0}</Badge></div>{(runStatus.tasks||[]).filter(t=>t.error).map(t=><p key={t.id} className={t.status==="failed"?"notice-error":"muted"}>{t.company || `Job #${t.job_id}`} · {t.error}</p>)}</section>}
+    {runStatus && <section className="panel"><div className="panel-head"><div><h2>Ingestion run #{runStatus.run_id}</h2><span>Status: {runStatus.status} · {runStatus.jobs_ingested} jobs discovered</span></div><button className="ghost" onClick={()=>go("jobs")}>Open Jobs</button></div><div className="progress-track" aria-label={`Ingestion progress ${runPercent}%`}><span style={{width:`${runPercent}%`}}/></div><div className="progress-caption">{runPercent}% complete</div><div className="chips"><Badge>Queued {runStatus.task_counts?.queued ?? 0}</Badge><Badge>Running {runStatus.task_counts?.running ?? 0}</Badge><Badge tone="success">Completed {runStatus.task_counts?.completed ?? 0}</Badge><Badge tone="warning">Warnings {runStatus.task_counts?.completed_with_warnings ?? 0}</Badge><Badge tone="warning">Failed {runStatus.task_counts?.failed ?? 0}</Badge></div><div className="ingestion-task-list">{(runStatus.tasks||[]).map(t=><div className="ingestion-task-row" key={t.id || `${t.company_id}-${t.job_id}`}><strong>{t.company || `Company #${t.company_id || "—"}`}</strong><Badge tone={t.status==="completed"?"success":t.status==="failed"?"warning":"neutral"}>{t.status}</Badge><span>{t.jobs_ingested || 0} jobs saved</span>{t.error && <span className={t.status==="failed"?"notice-error":"muted"}>{t.error}</span>}</div>)}</div></section>}
     <section className="panel">
       <div className="panel-head"><div><h2>Tracked sources</h2><span>{companies.length} companies configured</span></div></div>
       {companies.length ? <div className="table-wrap"><table><thead><tr><th>COMPANY</th><th>CAREERS URL</th><th>PLATFORM</th><th>STATUS</th><th></th></tr></thead><tbody>

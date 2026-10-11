@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
@@ -23,6 +24,24 @@ from app.db.models import (
 from app.db.session import get_db
 
 router = APIRouter(prefix="/account", tags=["account"])
+
+
+def _remove_generated_resume_files(candidate_ids: list[int], job_ids: list[int]) -> None:
+    root = Path("generated_resumes").resolve()
+    paths = set()
+    for candidate_id in candidate_ids:
+        paths.add(root / "masters" / f"candidate_{candidate_id}_master.docx")
+        paths.update(root.glob(f"candidate_{candidate_id}_job_*.docx"))
+    for job_id in job_ids:
+        paths.update(root.glob(f"candidate_*_job_{job_id}*.docx"))
+    for path in paths:
+        try:
+            resolved = path.resolve()
+            if root in resolved.parents and resolved.is_file():
+                resolved.unlink()
+        except OSError:
+            # A missing/unavailable artifact must not roll back the DB reset.
+            pass
 
 
 @router.post("/reset")
@@ -65,9 +84,13 @@ def reset_account_workspace(
         other_task = db.scalar(
             select(IngestionTask.id)
             .join(IngestionRun, IngestionTask.run_id == IngestionRun.id)
-            .where(IngestionTask.company_id == company_id, IngestionRun.id.not_in(run_ids))
+            .where(
+                IngestionTask.company_id == company_id,
+                IngestionRun.supabase_user_id.is_not(None),
+                IngestionRun.supabase_user_id != owner_id,
+            )
             .limit(1)
-        ) if run_ids else None
+        )
         if other_task is not None:
             continue
 
@@ -84,7 +107,10 @@ def reset_account_workspace(
         )
         other_resume = db.scalar(
             select(ResumeVersion.id)
-            .where(ResumeVersion.job_id.in_(job_ids), ResumeVersion.candidate_id.not_in(candidate_ids))
+            .where(
+                ResumeVersion.job_id.in_(job_ids),
+                or_(ResumeVersion.candidate_id.is_(None), ResumeVersion.candidate_id.not_in(candidate_ids)),
+            )
             .limit(1)
         )
         other_application = db.scalar(
@@ -106,6 +132,7 @@ def reset_account_workspace(
     db.execute(delete(CandidateProfile).where(CandidateProfile.id.in_(candidate_ids))) if candidate_ids else None
 
     deleted_jobs = 0
+    safe_job_ids: list[int] = []
     if safe_company_ids:
         safe_job_ids = list(db.scalars(select(Job.id).where(Job.company_id.in_(safe_company_ids))))
         if safe_job_ids:
@@ -116,12 +143,16 @@ def reset_account_workspace(
             # Remove any remaining legacy artifacts for jobs that were proven unshared.
             db.execute(delete(PipelineRun).where(PipelineRun.job_id.in_(safe_job_ids)))
             db.execute(delete(ResumeVersion).where(ResumeVersion.job_id.in_(safe_job_ids)))
+            db.execute(delete(IngestionTask).where(IngestionTask.job_id.in_(safe_job_ids)))
             deleted_jobs = len(safe_job_ids)
             db.execute(delete(Job).where(Job.id.in_(safe_job_ids)))
+        # Remove any legacy anonymous task references before deleting companies.
+        db.execute(delete(IngestionTask).where(IngestionTask.company_id.in_(safe_company_ids)))
         db.execute(delete(Person).where(Person.company_id.in_(safe_company_ids)))
         db.execute(delete(Company).where(Company.id.in_(safe_company_ids)))
 
     db.commit()
+    _remove_generated_resume_files(candidate_ids, safe_job_ids)
     return {
         "status": "reset",
         "candidate_profiles_removed": len(candidate_ids),

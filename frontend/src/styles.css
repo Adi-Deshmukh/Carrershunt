@@ -50,3 +50,10 @@ button:disabled,.primary:disabled,.ghost:disabled,.table-action:disabled{cursor:
 .job-description-content.full-description{max-height:none;overflow:visible;padding-top:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.8;color:#c0c8d5}
 @media(max-width:760px){.job-detail-heading{flex-direction:column}.job-detail-actions{justify-content:flex-start}.job-detail-actions .primary,.job-detail-actions .ghost{width:100%;justify-content:center}}
 
+
+
+.ingestion-task-list{display:grid;gap:8px;margin-top:14px}
+.ingestion-task-row{display:grid;grid-template-columns:minmax(120px,1fr) auto auto;align-items:start;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#0a0f17;font-size:11px}
+.ingestion-task-row>strong{overflow-wrap:anywhere}
+.ingestion-task-row>span:last-child{grid-column:1/-1;line-height:1.5;overflow-wrap:anywhere}
+@media(max-width:640px){.ingestion-task-row{grid-template-columns:1fr auto}.ingestion-task-row>span:nth-child(3){grid-column:1/-1}.ingestion-task-row>span:last-child{grid-column:1/-1}}
