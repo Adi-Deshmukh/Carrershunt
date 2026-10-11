@@ -19,16 +19,20 @@ services:
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       GITHUB_MAX_REPOSITORIES: ${GITHUB_MAX_REPOSITORIES:-25}
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   worker:
     build: .
     command: python -m app.workers.ingestion_worker --workers ${INGESTION_WORKERS:-4}
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/carrershunt
+    restart: unless-stopped
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   db:
     image: postgres:17
@@ -40,6 +44,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d carrershunt"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   redis:
     image: redis:7-alpine
