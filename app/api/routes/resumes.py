@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.db.models import CandidateProfile, Job, PipelineRun, ResumeVersion
 from app.db.session import get_db
 from app.schemas.agent import ResumePlan
@@ -14,11 +15,28 @@ from app.services.resume_service import generate_docx_from_plan
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 
 
+def _current_candidate(db: Session, user: dict) -> CandidateProfile | None:
+    query = select(CandidateProfile)
+    if user.get("id"):
+        query = query.where(CandidateProfile.supabase_user_id == user["id"])
+    else:
+        query = query.where(CandidateProfile.supabase_user_id.is_(None))
+    return db.scalar(query.order_by(CandidateProfile.id.desc()))
+
+
+def _owns_resume(version: ResumeVersion, candidate: CandidateProfile | None, user: dict) -> bool:
+    if candidate is None:
+        return False
+    if user.get("id"):
+        return version.candidate_id == candidate.id
+    return version.candidate_id in (None, candidate.id)
+
+
 @router.post("/tailor/{job_id}")
-def tailor_resume(job_id: int, db: Session = Depends(get_db)):
+def tailor_resume(job_id: int, db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     """Create a DOCX only after the user explicitly requests it for a reviewed job."""
     job = db.get(Job, job_id)
-    candidate = db.scalar(select(CandidateProfile).order_by(CandidateProfile.id.desc()))
+    candidate = _current_candidate(db, user)
     if not job or not candidate:
         raise HTTPException(status_code=404, detail="Job or candidate profile not found")
 
@@ -54,6 +72,7 @@ def tailor_resume(job_id: int, db: Session = Depends(get_db)):
     path, content = generate_docx_from_plan(candidate, job, plan)
     version = ResumeVersion(
         job_id=job.id,
+        candidate_id=candidate.id,
         filename=path.name,
         content_json=json.dumps(content, ensure_ascii=False),
         file_path=str(path),
@@ -71,17 +90,19 @@ def tailor_resume(job_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{resume_id}")
-def get_resume(resume_id: int, db: Session = Depends(get_db)):
+def get_resume(resume_id: int, db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     version = db.get(ResumeVersion, resume_id)
-    if not version:
+    candidate = _current_candidate(db, user)
+    if not version or not _owns_resume(version, candidate, user):
         raise HTTPException(status_code=404, detail="Resume not found")
     return {"resume_id": version.id, "job_id": version.job_id, "filename": version.filename, "content": json.loads(version.content_json), "created_at": version.created_at}
 
 
 @router.get("/{resume_id}/preview", response_class=HTMLResponse)
-def preview_resume(resume_id: int, db: Session = Depends(get_db)):
+def preview_resume(resume_id: int, db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     version = db.get(ResumeVersion, resume_id)
-    if not version:
+    candidate = _current_candidate(db, user)
+    if not version or not _owns_resume(version, candidate, user):
         raise HTTPException(status_code=404, detail="Resume not found")
     content = json.loads(version.content_json)
     import html
@@ -103,9 +124,10 @@ def preview_resume(resume_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{resume_id}/download")
-def download_resume(resume_id: int, db: Session = Depends(get_db)):
+def download_resume(resume_id: int, db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     version = db.get(ResumeVersion, resume_id)
-    if not version:
+    candidate = _current_candidate(db, user)
+    if not version or not _owns_resume(version, candidate, user) or not version.file_path:
         raise HTTPException(status_code=404, detail="Resume not found")
     return FileResponse(
         version.file_path,
