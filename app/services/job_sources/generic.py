@@ -67,16 +67,75 @@ def _ats_platform(url: str) -> str | None:
 
 
 def _looks_like_job(title: str, url: str) -> bool:
+    """Return True only for URL shapes that plausibly identify one job posting.
+
+    A careers-site link containing words like "engineering" or "careers" is
+    not enough: company culture, benefits, products, and resource pages often
+    live under those same paths. Prefer explicit job-detail URL patterns.
+    """
     parsed = urlparse(url)
-    path = parsed.path.lower()
-    text = f"{title} {path}".lower()
-    has_role_word = any(word in text for word in JOB_WORDS)
-    has_job_path = any(word in path for word in JOB_PATH_WORDS)
-    is_ats = _ats_platform(url) is not None
-    last_segment = path.rstrip("/").split("/")[-1] if path.strip("/") else ""
-    listing_pages = {"careers", "career", "jobs", "job", "openings", "positions", "vacancies", "current-openings"}
-    detail_path = has_job_path and len([part for part in path.split("/") if part]) >= 2 and last_segment not in listing_pages
-    return bool(parsed.scheme in {"http", "https"} and (is_ats or (detail_path and (has_role_word or len([part for part in path.split("/") if part]) >= 2))))
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return False
+
+    path = (parsed.path or "/").lower().rstrip("/") or "/"
+    parts = [part for part in path.split("/") if part]
+    if not parts:
+        return False
+
+    # These are informational/culture/product routes, not job postings, even
+    # when nested beneath a /careers/ path or linked from a careers homepage.
+    excluded_segments = {
+        "resources", "resource", "teams", "team", "engineering", "sales",
+        "earlycareers", "early-careers", "all-jobs", "alljobs", "employee-awards",
+        "awards", "teamanywhere", "team-anywhere", "team-everyone", "benefits",
+        "perk-and-benefits", "interviewing", "applying", "career-growth",
+        "products", "product", "try", "trust", "marketplace", "developer",
+        "partners", "contact", "about", "culture", "values", "locations",
+        "categories", "jobs-by-location", "jobs-by-category", "join",
+    }
+    if any(part in excluded_segments for part in parts):
+        return False
+
+    last = parts[-1]
+    listing_pages = {
+        "careers", "career", "jobs", "job", "all-jobs", "openings",
+        "positions", "vacancies", "current-openings", "search",
+    }
+    if last in listing_pages:
+        return False
+
+    platform = _ats_platform(url)
+    if platform == "greenhouse":
+        # Greenhouse detail URLs use /<board>/jobs/<numeric-id>.
+        return len(parts) >= 3 and parts[-2] == "jobs" and parts[-1].isdigit()
+    if platform == "lever":
+        # Lever detail URLs use /<company>/<posting-slug>.
+        return len(parts) >= 2 and parts[-1] not in listing_pages
+    if platform == "ashby":
+        # Ashby detail URLs use /<company>/<posting-slug-or-id>.
+        return len(parts) >= 2 and parts[-1] not in listing_pages
+
+    # Explicit job routes, including Atlassian Talent Community's
+    # /atlassian-talent-community/jobs/<posting-id>.
+    for marker in ("jobs", "job", "positions", "position", "openings",
+                   "open-roles", "vacancies", "requisitions"):
+        if marker in parts:
+            index = parts.index(marker)
+            remainder = parts[index + 1:]
+            if remainder and remainder[-1] not in listing_pages:
+                return True
+
+    # Some ATS vendors use /careers/<posting-id> or /careers/details/<slug>.
+    for marker in ("career", "careers"):
+        if marker in parts:
+            index = parts.index(marker)
+            remainder = parts[index + 1:]
+            if len(remainder) >= 2 and remainder[0] in {"detail", "details", "job", "jobs", "position", "positions"}:
+                return True
+            if len(remainder) == 1 and (remainder[0].isdigit() or re.fullmatch(r"[a-f0-9]{8,}", remainder[0])):
+                return True
+
+    return False
 
 
 def _json_job_postings(soup: BeautifulSoup) -> list[dict]:
