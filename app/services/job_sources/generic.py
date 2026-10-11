@@ -410,7 +410,7 @@ class GenericSource(JobSource):
                     else:
                         for item in _json_job_postings(rendered_soup):
                             record = _posting_to_record(item, index_url, allow_base_fallback=False)
-                            if record and len(record.description) >= 100 and record.job_url.rstrip("/") != index_url.rstrip("/"):
+                            if record and len(record.description) >= 100 and not _same_page(record.job_url, index_url):
                                 jobs[record.job_url] = record
                         rendered_candidates = []
                         for link in rendered_soup.select("a[href]"):
