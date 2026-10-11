@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
-from app.db.models import CandidateProfile, Company, IngestionRun, IngestionTask
+from app.db.models import CandidateProfile, Company, IngestionRun, IngestionTask, Job
 from app.db.session import get_db
 from app.schemas.company import CompanyCreate
 from app.services.company_import import import_companies
@@ -50,7 +50,27 @@ async def import_company_excel(
         db.refresh(company)
         stored.append(company)
 
-    run = IngestionRun(total_companies=len(stored), status="queued" if stored else "completed", supabase_user_id=user.get("id"))
+    # A fresh import starts a fresh crawl window. Hide stale jobs from earlier
+    # imports when this source is not actively shared with another signed-in account.
+    owner_id = user.get("id")
+    for company in stored:
+        other_owner_task = None
+        if owner_id:
+            other_owner_task = db.scalar(
+                select(IngestionTask.id)
+                .join(IngestionRun, IngestionTask.run_id == IngestionRun.id)
+                .where(
+                    IngestionTask.company_id == company.id,
+                    IngestionRun.supabase_user_id.is_not(None),
+                    IngestionRun.supabase_user_id != owner_id,
+                )
+                .limit(1)
+            )
+        if other_owner_task is None:
+            db.execute(update(Job).where(Job.company_id == company.id).values(status="stale"))
+    db.commit()
+
+    run = IngestionRun(total_companies=len(stored), status="queued" if stored else "completed", supabase_user_id=owner_id)
     db.add(run)
     db.flush()
     for company in stored:
