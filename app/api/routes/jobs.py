@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.db.models import Company, IngestionRun, IngestionTask, Job
 from app.db.session import get_db
+from app.services.job_sources.generic import _looks_like_job
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -58,6 +59,12 @@ def list_jobs(db: Session = Depends(get_db), user: dict = Depends(get_current_us
     else:
         query = query.where(IngestionRun.supabase_user_id.is_(None))
     jobs = db.scalars(query.distinct().order_by(Job.updated_at.desc())).all()
+    # Hide legacy generic-source rows that were collected from informational
+    # pages before strict URL validation was introduced.
+    jobs = [
+        job for job in jobs
+        if job.source != "generic" or _looks_like_job(job.title, job.job_url)
+    ]
     return [
         {
             "id": job.id,
