@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.account import router as account_router
 from app.api.routes.applications import router as applications_router
 from app.api.routes.candidates import router as candidates_router
 from app.api.routes.companies import router as companies_router
@@ -87,6 +88,7 @@ app.include_router(jobs_router, dependencies=[Depends(get_current_user)])
 app.include_router(matches_router, dependencies=[Depends(get_current_user)])
 app.include_router(resumes_router, dependencies=[Depends(get_current_user)])
 app.include_router(people_router, dependencies=[Depends(get_current_user)])
+app.include_router(account_router, dependencies=[Depends(get_current_user)])
 app.include_router(applications_router, dependencies=[Depends(get_current_user)])
 app.include_router(evidence_router, dependencies=[Depends(get_current_user)])
 app.include_router(github_router, dependencies=[Depends(get_current_user)])
