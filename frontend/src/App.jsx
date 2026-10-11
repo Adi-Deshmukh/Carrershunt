@@ -256,19 +256,24 @@ function Jobs({ jobs, companies, candidate, refresh }) {
   const [result, setResult] = useState(null);
   const [message, setMessage] = useState("");
   const [creatingResume, setCreatingResume] = useState(false);
+  const createResumeInFlight = useRef(false);
   const isAnalyzing = Object.values(running).some(Boolean);
   const isBusy = isAnalyzing || creatingResume;
   const canAnalyze = Boolean(candidate?.resume_text && candidate.resume_text !== "Master resume pending" && candidate.resume_text.trim().length >= 100);
 
   const createResume = async () => {
-    if (!selected || !result?.resume) return;
+    if (createResumeInFlight.current || !selected || !result?.resume) return;
+    createResumeInFlight.current = true;
     setCreatingResume(true); setMessage("");
     try {
       const r = await api(`/resumes/tailor/${selected.id}`, { method: "POST" });
       setResult(current => ({ ...current, resume_generated: true, resume_id: r.resume_id, resume_download_url: r.download_url }));
       setMessage("Tailored DOCX created and passed quality checks.");
     } catch (e) { setMessage(e.message); }
-    finally { setCreatingResume(false); }
+    finally {
+      createResumeInFlight.current = false;
+      setCreatingResume(false);
+    }
   };
 
   const openResult = async (job) => {
