@@ -1,3 +1,4 @@
+import base64
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -8,8 +9,28 @@ import httpx
 from app.core.config import settings
 from app.services.evidence import EvidenceInput, upsert_evidence
 
-
 GITHUB_API = "https://api.github.com"
+REPO_SKILL_ALIASES = {
+    "postgres": "postgresql",
+    "js": "javascript",
+    "ts": "typescript",
+    "py": "python",
+    "sklearn": "scikit-learn",
+    "pytorch": "pytorch",
+    "tf": "tensorflow",
+    "k8s": "kubernetes",
+}
+PROJECT_SKILLS = (
+    "python", "java", "javascript", "typescript", "react", "next.js", "node.js",
+    "django", "fastapi", "flask", "express", "postgresql", "mysql", "mongodb",
+    "redis", "sqlite", "firebase", "supabase", "docker", "kubernetes", "aws",
+    "azure", "gcp", "terraform", "github actions", "ci/cd", "machine learning",
+    "deep learning", "nlp", "computer vision", "pytorch", "tensorflow",
+    "scikit-learn", "xgboost", "pandas", "numpy", "langchain", "llm", "rag",
+    "vector database", "chromadb", "faiss", "spark", "hadoop", "airflow",
+    "kafka", "graphql", "rest api", "websocket", "unity", "c#", "c++", "rust",
+    "go", "linux", "html", "css", "sql", "git",
+)
 
 
 @dataclass
@@ -39,7 +60,7 @@ def _headers() -> dict[str, str]:
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "Carrershunt/0.1",
+        "User-Agent": "Carrershunt/0.2",
     }
     if settings.github_token:
         headers["Authorization"] = f"Bearer {settings.github_token}"
@@ -59,116 +80,116 @@ async def _get(client: httpx.AsyncClient, path: str) -> httpx.Response:
     return response
 
 
+def _repo_skills(languages: dict[str, Any], topics: list[str], text: str) -> list[str]:
+    searchable = " ".join([*languages.keys(), *topics, text]).lower()
+    found = set()
+    for skill in PROJECT_SKILLS:
+        if re.search(rf"(?<![a-z0-9]){re.escape(skill.lower())}(?![a-z0-9])", searchable):
+            found.add(skill)
+    for alias, canonical in REPO_SKILL_ALIASES.items():
+        if re.search(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", searchable):
+            found.add(canonical)
+    found.update(languages.keys())
+    return sorted(found)
+
+
+def _repo_summary(repo: dict[str, Any], languages: dict[str, Any], topics: list[str], readme: str) -> str:
+    sections = [
+        f"Repository: {repo.get('full_name', repo.get('name', ''))}",
+        f"Description: {repo.get('description') or 'Not provided'}",
+        f"Primary language: {repo.get('language') or 'Not provided'}",
+        "Languages: " + ", ".join(languages.keys()),
+        "Topics: " + ", ".join(topics),
+    ]
+    if readme:
+        sections.append("README evidence:\n" + readme[:12000])
+    return "\n".join(sections)
+
+
 async def sync_github(db, candidate_id: int, username_or_url: str, max_repos: int = 25) -> GitHubSyncResult:
     username = normalize_github_username(username_or_url)
     if max_repos < 1 or max_repos > 100:
         raise ValueError("max_repos must be between 1 and 100")
 
-    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
         profile_response = await _get(client, f"/users/{username}")
         profile = profile_response.json()
-
         repos_response = await _get(
             client,
             f"/users/{username}/repos?per_page={max_repos}&sort=updated&direction=desc&type=owner",
         )
         repos = repos_response.json()
 
-        count = 0
         upserted = 0
-
-        profile_text = " ".join(
-            filter(None, [
-                profile.get("name"),
-                profile.get("bio"),
-                profile.get("company"),
-                profile.get("location"),
-            ])
-        )
+        profile_text = " ".join(filter(None, [
+            profile.get("name"), profile.get("bio"), profile.get("company"), profile.get("location")
+        ]))
         if profile_text:
-            upsert_evidence(
-                db,
-                candidate_id,
-                EvidenceInput(
-                    source="github",
-                    source_key=f"user:{username}",
-                    title=f"GitHub profile: {profile.get('name') or username}",
-                    content=profile_text,
-                    url=profile.get("html_url"),
-                    evidence_type="profile",
-                    skills=[],
-                    metadata={"username": username, "public_repos": profile.get("public_repos", 0)},
-                ),
-            )
+            upsert_evidence(db, candidate_id, EvidenceInput(
+                source="github", source_key=f"user:{username}",
+                title=f"GitHub profile: {profile.get('name') or username}",
+                content=profile_text, url=profile.get("html_url"),
+                evidence_type="profile", skills=[],
+                metadata={"username": username, "public_repos": profile.get("public_repos", 0)},
+            ))
             upserted += 1
 
+        repos_seen = 0
         for repo in repos:
-            if repo.get("fork"):
+            if repo.get("fork") or repo.get("archived"):
                 continue
-            count += 1
+            repos_seen += 1
+            owner = (repo.get("owner") or {}).get("login") or username
+            repo_name = repo["name"]
+            prefix = f"/repos/{owner}/{repo_name}"
 
+            # Individual ancillary endpoints must not discard the rest of a
+            # repository when a README/language endpoint is unavailable.
             readme_text = ""
             try:
-                readme_response = await _get(
-                    client, f"/repos/{username}/{repo['name']}/readme"
-                )
-                readme = readme_response.json()
-                import base64
-                readme_text = base64.b64decode(
-                    (readme.get("content") or "").replace("\n", "")
-                ).decode("utf-8", errors="replace")
-            except (ValueError, httpx.HTTPError):
-                readme_text = ""
+                readme = (await _get(client, f"{prefix}/readme")).json()
+                encoded = (readme.get("content") or "").replace("\\n", "")
+                readme_text = base64.b64decode(encoded).decode("utf-8", errors="replace")
+            except (ValueError, httpx.HTTPError, KeyError, TypeError):
+                pass
 
-            languages_response = await _get(
-                client, f"/repos/{username}/{repo['name']}/languages"
-            )
-            languages: dict[str, Any] = languages_response.json()
+            try:
+                languages: dict[str, Any] = (await _get(client, f"{prefix}/languages")).json()
+            except (ValueError, httpx.HTTPError):
+                languages = {}
 
             topics = repo.get("topics") or []
-            skills = sorted(set([*languages.keys(), *topics]))
-            sections = [
-                repo.get("name", ""),
-                repo.get("description") or "",
-                "Topics: " + ", ".join(topics),
-                "Languages: " + ", ".join(languages.keys()),
-            ]
-            if readme_text:
-                sections.append("README:\n" + readme_text[:12000])
-
-            content = "\n".join(s for s in sections if s).strip()
-            if not content:
-                continue
-
-            upsert_evidence(
-                db,
-                candidate_id,
-                EvidenceInput(
-                    source="github",
-                    source_key=f"repo:{repo['full_name']}",
-                    title=repo["name"],
-                    content=content,
-                    url=repo.get("html_url"),
-                    evidence_type="project",
-                    skills=skills,
-                    metadata={
-                        "repository": repo["full_name"],
-                        "stars": repo.get("stargazers_count", 0),
-                        "forks": repo.get("forks_count", 0),
-                        "default_branch": repo.get("default_branch"),
-                        "updated_at": repo.get("updated_at"),
-                    },
-                ),
-            )
+            summary = _repo_summary(repo, languages, topics, readme_text)
+            skills = _repo_skills(languages, topics, summary)
+            upsert_evidence(db, candidate_id, EvidenceInput(
+                source="github",
+                source_key=f"repo:{repo.get('full_name') or owner + '/' + repo_name}",
+                title=repo_name,
+                content=summary,
+                url=repo.get("html_url"),
+                evidence_type="project",
+                skills=skills,
+                metadata={
+                    "repository": repo.get("full_name") or f"{owner}/{repo_name}",
+                    "description": repo.get("description"),
+                    "language": repo.get("language"),
+                    "languages": languages,
+                    "topics": topics,
+                    "stars": repo.get("stargazers_count", 0),
+                    "forks": repo.get("forks_count", 0),
+                    "default_branch": repo.get("default_branch"),
+                    "updated_at": repo.get("updated_at"),
+                    "readme_indexed": bool(readme_text),
+                },
+            ))
             upserted += 1
 
         db.commit()
-
         remaining = repos_response.headers.get("X-RateLimit-Remaining")
         return GitHubSyncResult(
             username=username,
-            repositories_seen=count,
-            repositories_indexed=count,
+            repositories_seen=repos_seen,
+            repositories_indexed=repos_seen,
             evidence_created_or_updated=upserted,
             rate_limit_remaining=int(remaining) if remaining and remaining.isdigit() else None,
         )
